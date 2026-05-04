@@ -19,3 +19,6 @@ research/
 # 示例输入文本（demo/demo_zip_input.txt 等纯文本素材）照常入库
 demo/seal_zip
 demo/*.fixture
+
+# 本地开发脚本（个人配置，不入库）
+sync-to-github.sh

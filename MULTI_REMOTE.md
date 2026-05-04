@@ -17,12 +17,14 @@ git remote -v
 
 ## 推送方式
 
-### 方式一：使用 Makefile（推荐）
+### 方式一：使用本地脚本（推荐）
 
 ```bash
-# 同时推送到两个平台
-make push-all
+# 项目根目录下执行
+./sync-to-github.sh
 ```
+
+> **注意：** `sync-to-github.sh` 是本地脚本，已加入 `.gitignore`，不会提交到仓库。
 
 ### 方式二：手动推送
 
