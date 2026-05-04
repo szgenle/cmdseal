@@ -2,6 +2,9 @@
 """
 cmdseal — Plan D: AEAD-sealed command wrapper.
 
+GUI users: run `make app` instead; this CLI is for scripting,
+CI pipelines, and audits.
+
 Generates a capability-gated macOS binary from a shell-style command.
 The full command is AES-256-GCM encrypted with a key K that lives in
 the macOS Keychain, behind an ACL that only admits the generated

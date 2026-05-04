@@ -33,12 +33,42 @@
 - [`uv`](https://github.com/astral-sh/uv) — 用于 GUI / `.app` 构建
   （如果仅使用 CLI 可跳过）
 
-## 快速上手（CLI）
+## 快速上手（GUI）
+
+如果你喜欢图形界面：
 
 ```bash
 git clone https://codeup.aliyun.com/szgenle/cmdseal.git
 cd cmdseal
 
+make sync            # 在本地 uv 虚拟环境中安装 PySide6
+make app             # 生成 dist/cmdseal.app
+open dist/cmdseal.app
+```
+
+这将启动封存向导 —— 一个四步图形界面：
+1. **命令** — 输入你的命令（例如：`zip -j -P mypassword {{arg:1}}`）
+2. **Secret** — 如果使用了 `{{secret:NAME}}`，在这里填写（否则跳过）
+3. **选项** — 输出路径、标签、签名身份
+4. **执行** — 预览并在后台运行 `cmdseal.py`
+
+GUI 是 `cmdseal.py` 的一层薄封装；没有重复的加密代码。
+封存完成后，你会得到一个独立的二进制文件，可以交给 AI 智能体或脚本管道使用。
+
+### 首次运行对话框
+
+首次运行新生成的二进制时，macOS 会显示**一次**系统对话框
+（登录密码 + “始终允许”）。这是将 keychain 条目绑定到此二进制
+cdhash 的 partition-list 握手过程。每个封存的二进制在每个用户机器
+上只发生一次；`cmdseal` 本身此后不再要求输入密码。后续所有运行
+都是静默且毫秒级快速的。
+
+## 高级：CLI 与脚本
+
+对于 CI 管道、AI 智能体构建脚本，或者你更喜欢终端，`cmdseal.py`
+提供完整的 CLI 访问：
+
+```bash
 # 封存一个带密码的 zip 命令。`zippw` 通过交互方式收集
 # 并嵌入 AEAD 密文中；它永远不会以明文形式存储。
 python3 cmdseal.py seal \
@@ -48,12 +78,10 @@ python3 cmdseal.py seal \
 
 # 使用它 — 现在只需要两个位置参数，命令行上不再有密码。
 ./seal_zip  out.zip  /path/to/secret.txt
-# 在全新生成的二进制上首次运行：一个 macOS 系统对话框
-#（登录密码 + "始终允许"）。后续所有运行：静默
-# 且毫秒级快速。
 ```
 
-首次运行对话框是 macOS partition-list 握手过程，将 keychain 条目绑定到此二进制的 cdhash。每个封存的二进制在每个用户机器上只发生一次；`cmdseal` 本身此后不再要求输入密码。
+> **GUI 用户：** 请运行 `make app`；此 CLI 适用于脚本编写、
+> CI 管道和审计。
 
 ## 占位符参考
 
@@ -118,19 +146,12 @@ python3 cmdseal.py rotate ./seal_zip
 # 无需用户交互 — 约 1 秒内静默完成。
 ```
 
-## GUI（可选）
-
-如果你喜欢图形界面：
+## GUI 快速参考
 
 ```bash
 make sync            # 在本地 uv 虚拟环境中安装 PySide6
-make run             # 启动封存向导
-```
-
-或者构建一个可双击的 `.app`：
-
-```bash
-make app             # 生成 dist/cmdseal.app
+make run             # 启动封存向导（开发模式）
+make app             # 生成 dist/cmdseal.app（独立应用）
 open dist/cmdseal.app
 ```
 
@@ -213,12 +234,12 @@ strings ./seal_zip | grep cmdseal
 - **仅 macOS。** Linux（`libsecret`）/ Windows（DPAPI）是
   未来工作；暂无时间表。
 
+## 许可证
+
+[MIT](./LICENSE) — 做你想做的，署名 appreciated，无保修。
+
 ## 相关
 
 - [DESIGN.md](./DESIGN.md) — 架构和设计决策
 - [DESIGN.zh.md](./DESIGN.zh.md) — 中文设计说明
 - 作者：[szgenle.com](https://szgenle.com)
-
-## 许可证
-
-[MIT](./LICENSE) — 做你想做的，感谢支持，无保修。

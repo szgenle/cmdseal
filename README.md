@@ -38,12 +38,44 @@ ever seeing the master password.
 - [`uv`](https://github.com/astral-sh/uv) — for the GUI / `.app` build
   (skip if you only use the CLI)
 
-## Quick start (CLI)
+## Quick start (GUI)
+
+If you prefer clicking:
 
 ```bash
 git clone https://codeup.aliyun.com/szgenle/cmdseal.git
 cd cmdseal
 
+make sync            # install PySide6 into a local uv venv
+make app             # produces dist/cmdseal.app
+open dist/cmdseal.app
+```
+
+This launches the seal wizard — a four-step GUI:
+1. **Command** — type your command (e.g. `zip -j -P mypassword {{arg:1}}`)
+2. **Secrets** — if you used `{{secret:NAME}}`, fill them in here (skipped otherwise)
+3. **Options** — output path, label, signing identity
+4. **Execute** — preview and run `cmdseal.py` in the background
+
+The GUI is a thin wrapper over `cmdseal.py`; no crypto code is
+duplicated. After sealing, you get a standalone binary that can be
+handed to an AI agent or scripted pipeline.
+
+### First-run dialog
+
+The first time you run a freshly-sealed binary, macOS shows **one**
+system dialog (login password + "Always Allow"). This is the
+partition-list handshake binding the keychain item to this binary's
+cdhash. It happens once per sealed binary per user; `cmdseal` itself
+never asks for a password again. All subsequent runs are silent and
+millisecond-fast.
+
+## Advanced: CLI & scripting
+
+For CI pipelines, AI-agent build scripts, or when you prefer the
+terminal, `cmdseal.py` provides full CLI access:
+
+```bash
 # Seal a zip-with-password command. `zippw` is collected interactively
 # and baked into the AEAD ciphertext; it is never stored in plaintext.
 python3 cmdseal.py seal \
@@ -53,14 +85,10 @@ python3 cmdseal.py seal \
 
 # Use it — just two positional args now, no password on the command line.
 ./seal_zip  out.zip  /path/to/secret.txt
-# First run on a freshly-generated binary: ONE macOS system dialog
-# (login password + "Always Allow"). All subsequent runs: silent
-# and millisecond-fast.
 ```
 
-The first-run dialog is the macOS partition-list handshake binding the
-keychain item to this binary's cdhash. It happens once per sealed
-binary per user; `cmdseal` itself never asks for a password again.
+> **GUI users:** run `make app` instead; this CLI is for scripting,
+> CI pipelines, and audits.
 
 ## Placeholder reference
 
@@ -129,19 +157,12 @@ python3 cmdseal.py rotate ./seal_zip
 # No user interaction — runs silently in ~1s.
 ```
 
-## GUI (optional)
-
-If you prefer clicking:
+## GUI quick reference
 
 ```bash
 make sync            # install PySide6 into a local uv venv
-make run             # launches the seal wizard
-```
-
-Or build a double-clickable `.app`:
-
-```bash
-make app             # produces dist/cmdseal.app
+make run             # launches the seal wizard (development mode)
+make app             # produces dist/cmdseal.app (standalone)
 open dist/cmdseal.app
 ```
 

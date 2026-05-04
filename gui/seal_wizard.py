@@ -84,14 +84,16 @@ class CommandPage(QWizardPage):
         super().__init__()
         self.setTitle("命令模板")
         self.setSubTitle(
-            "填写要密封的命令。支持 {{secret:NAME}}（生成时采集）"
-            "与 {{arg:N}}（运行时 argv）。"
+            "填写要密封的命令。\n"
+            "• 可直接写字面量密码（如：zip -j -P mypassword）\n"
+            "• 或使用 {{secret:NAME}}（生成时采集，不暴露给 shell history）\n"
+            "• 使用 {{arg:N}} 表示运行时参数"
         )
 
         self.edit = QPlainTextEdit()
         self.edit.setPlaceholderText(
-            "例如：zhmm-cli -i /data.zmb --account you@example.com "
-            "--pwd {{secret:master}} -s {{arg:1}}"
+            "例如：zip -j -P mypassword {{arg:1}} {{arg:2}}\n"
+            "或：zhmm-cli --pwd {{secret:master}} -s {{arg:1}}"
         )
         self.edit.setTabChangesFocus(True)
         mono = QFont("Menlo")
@@ -124,11 +126,28 @@ class CommandPage(QWizardPage):
                 self.hint.setText(f"⚠ 无法解析 shell 引用：{e}")
                 self.completeChanged.emit()
                 return
+            
+            # 检测首 token 是否为占位符或裸程序名
+            first_token = tokens[0] if tokens else ""
+            path_warning = ""
+            if first_token and not first_token.startswith('/'):
+                if first_token.startswith('{{'):
+                    path_warning = "\n⚠ 首 token 是占位符，请确保运行时传入绝对路径"
+                else:
+                    path_warning = f"\nℹ 首 token '{first_token}' 将在封存时解析为绝对路径"
+            
             secrets, args = _scan_placeholders(cmd)
             parts = [f"tokens={len(tokens)}"]
             parts.append(f"secrets={', '.join(secrets) or '(none)'}")
             parts.append(f"args={', '.join(args) or '(none)'}")
-            self.hint.setText("  ·  ".join(parts))
+            
+            # 检测裸写 secret:/arg: 但未包 {{}} 的情况
+            bare_secret = re.search(r'(?<!\{)secret:[A-Za-z0-9_]+(?!\})', cmd)
+            bare_arg = re.search(r'(?<!\{)arg:[0-9]+(?!\})', cmd)
+            if bare_secret or bare_arg:
+                parts.insert(0, "⚠ 检测到未包裹的 secret:/arg:，请用 {{secret:NAME}} 或 {{arg:N}}")
+            
+            self.hint.setText("  ·  ".join(parts) + path_warning)
         self.completeChanged.emit()
 
     def isComplete(self) -> bool:
@@ -208,6 +227,16 @@ class SecretsPage(QWizardPage):
             rlay.addWidget(toggle)
             self._form.addRow(QLabel(name), row)
             self._inputs[name] = edit
+
+    def nextId(self) -> int:
+        # 如果没有 secret，直接跳到 OptionsPage（跳过本页）
+        wiz = self.wizard()
+        cmd = wiz.command_page.command() if isinstance(wiz, SealWizard) else ""
+        names, _ = _scan_placeholders(cmd)
+        if not names:
+            # OptionsPage 是第 3 页（索引 2）
+            return 2
+        return super().nextId()
 
     def isComplete(self) -> bool:
         # 任一 secret 不能为空
