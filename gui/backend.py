@@ -137,3 +137,27 @@ def list_sealed(prefix: str = "cmdseal.") -> list[dict]:
         raise subprocess.CalledProcessError(
             res.returncode, res.args, res.stdout, res.stderr)
     return json.loads(res.stdout or "[]")
+
+
+def delete_runner(service: str, account: str) -> None:
+    """删除单条 runner 的 keychain 密钥。
+
+    只删 keychain item，磁盘上的 sealed binary 不管——调用方自行决定
+    是否同步删文件。AEAD 密文不持有 K 不能解密，所以遗留的二进制
+    会变成废文件，但不构成秘密泄露。
+
+    失败时抛 CalledProcessError；UI 层自行捕获展示。
+    """
+    if not CMDSEAL_PY.is_file():
+        raise FileNotFoundError(f"cmdseal.py not found at {CMDSEAL_PY}")
+    res = subprocess.run(
+        [PYTHON_EXE, str(CMDSEAL_PY), "delete",
+         "--service", service, "--user", account],
+        capture_output=True,
+        text=True,
+        cwd=str(PROJECT_ROOT),
+        env=os.environ.copy(),
+    )
+    if res.returncode != 0:
+        raise subprocess.CalledProcessError(
+            res.returncode, res.args, res.stdout, res.stderr)

@@ -307,24 +307,46 @@ def kc_delete(service, account):
 # ----------------------------------------------------------------------
 
 def c_escape_string(s: str) -> str:
-    """Escape a Python string for inclusion inside a C \"...\" literal."""
+    """Escape a Python string for inclusion inside a C \"...\" literal.
+
+    非 ASCII 字符按 UTF-8 字节展开（每个字节 \\xNN），而不是按 Unicode
+    码点展开——C 的 \\x 转义会贪婪吞掉后续所有 hex 字符，若把 U+6D4B
+    写成 \\x6d4b 会被当成一个超出 unsigned char 范围的字符，编译报
+    \"hex escape sequence out of range\"。按 UTF-8 字节则每个 \\xNN
+    正好两位，运行时输出流按 UTF-8 解析即可直通中文/emoji 等。
+
+    为避免 C 将相邻 hex digit 合并到 \\x 里（例如 \"\\xe6\" + \"a\" 会变成
+    \\xe6a），在 \\xNN 之后紧跟的 ASCII hex 字符（0-9a-fA-F）前会强制
+    关闭字符串并重开：\"\\xe6\"\"a\"。
+    """
     out = []
-    for ch in s:
-        o = ord(ch)
-        if ch == "\\":
+    prev_was_hex_escape = False
+    for b in s.encode("utf-8"):
+        if b == 0x5C:           # backslash
             out.append("\\\\")
-        elif ch == '"':
+            prev_was_hex_escape = False
+        elif b == 0x22:         # double quote
             out.append('\\"')
-        elif ch == "\n":
+            prev_was_hex_escape = False
+        elif b == 0x0A:
             out.append("\\n")
-        elif ch == "\r":
+            prev_was_hex_escape = False
+        elif b == 0x0D:
             out.append("\\r")
-        elif ch == "\t":
+            prev_was_hex_escape = False
+        elif b == 0x09:
             out.append("\\t")
-        elif 0x20 <= o < 0x7F:
+            prev_was_hex_escape = False
+        elif 0x20 <= b < 0x7F:
+            ch = chr(b)
+            is_hex = ch in "0123456789abcdefABCDEF"
+            if prev_was_hex_escape and is_hex:
+                out.append('""')   # close + reopen to terminate \xNN
             out.append(ch)
+            prev_was_hex_escape = False
         else:
-            out.append(f"\\x{o:02x}")
+            out.append(f"\\x{b:02x}")
+            prev_was_hex_escape = True
     return "".join(out)
 
 
@@ -683,6 +705,20 @@ def do_list(args):
     return 0
 
 
+def do_delete(args):
+    """Delete a single runner's keychain key by service+account.
+
+    The on-disk binary is NOT touched — it will become unusable (AEAD
+    cannot unwrap without its K). Caller must decide whether to remove
+    the stale binary separately.
+    """
+    check_platform_and_tools()
+    kc_delete(args.service, args.user)
+    print(f"cmdseal: deleted keychain item "
+          f"(service={args.service}, account={args.user})")
+    return 0
+
+
 # ----------------------------------------------------------------------
 # CLI
 # ----------------------------------------------------------------------
@@ -738,10 +774,19 @@ def parse_args():
     pl.add_argument("--json", action="store_true",
                     help="emit machine-readable JSON instead of a table")
 
+    pd = sub.add_parser("delete",
+                        help="delete a sealed runner's keychain key "
+                             "(the on-disk binary is NOT touched; it will "
+                             "become unusable without its K)")
+    pd.add_argument("--service", required=True,
+                    help="keychain service name, e.g. cmdseal.ab12cd34.K")
+    pd.add_argument("--user", default=os.environ.get("USER", "root"),
+                    help="account name (default: $USER)")
+
     # Back-compat: if the user passes --command/--output at the top
     # level with no subcommand, treat as `seal`.
     if len(sys.argv) >= 2 and sys.argv[1] not in (
-            "seal", "rotate", "list", "-h", "--help"):
+            "seal", "rotate", "list", "delete", "-h", "--help"):
         # Inject default subcommand.
         args = p.parse_args(["seal"] + sys.argv[1:])
     else:
@@ -760,6 +805,8 @@ def main():
         return do_rotate(args)
     elif args.subcommand == "list":
         return do_list(args)
+    elif args.subcommand == "delete":
+        return do_delete(args)
     else:
         sys.exit(f"cmdseal: unknown subcommand {args.subcommand!r}")
 
