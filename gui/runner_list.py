@@ -9,9 +9,11 @@ Round 2.5 再做（参见决策：分阶段交付）。
 from __future__ import annotations
 
 import datetime
+import os
 import re
 import shlex
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QPoint
@@ -260,19 +262,48 @@ class RunnerListWindow(QWidget):
         label = str(meta.get("label") or "(legacy)")
         out = str(meta.get("output_path") or "")
 
+        # 决定磁盘文件联动删除的状态
+        #   full    : 有路径且文件存在——会被一并删
+        #   missing : 有路径但文件已不在——无需删
+        #   legacy  : 没路径（legacy runner 或 comment 缺失）——只删 K
+        binary_exists = False
+        binary_path: Path | None = None
+        if out:
+            binary_path = Path(out)
+            binary_exists = binary_path.is_file()
+
         msg = (
-            f"确认删除 runner 「{label}」的钥匙串密钥？\n\n"
+            f"确认删除 runner 「{label}」？\n\n"
             f"service : {svc}\n"
             f"account : {acct or '—'}\n"
         )
         if out:
             msg += f"binary  : {out}\n"
-        msg += (
-            "\n删除后：\n"
-            "• 钥匙串中的 K 将被永久移除，不可恢复。\n"
-            "• 磁盘上的 sealed binary 本身不会被删，但将无法再解密运行。\n"
-            "• 此操作本身不触发系统授权弹窗。\n"
-        )
+
+        if binary_exists:
+            action_summary = (
+                "\n将执行以下操作（不可恢复）：\n"
+                "① 删除钥匙串中的 K（密文将无法再被解密）\n"
+                "② 同步删除磁盘上的 sealed binary 文件\n"
+                "\n此操作不触发系统授权弹窗。"
+                "若文件删除失败（如权限不足），会提示但 K 已删除无法回滚。"
+            )
+        elif binary_path is not None:
+            action_summary = (
+                "\n将执行以下操作（不可恢复）：\n"
+                "① 删除钥匙串中的 K\n"
+                "② binary 文件已不在磁盘上（无需清理）\n"
+                "\n此操作不触发系统授权弹窗。"
+            )
+        else:
+            action_summary = (
+                "\n将执行以下操作（不可恢复）：\n"
+                "① 删除钥匙串中的 K\n"
+                "⚠️ legacy runner 没有 output_path 元数据，无法联动删除磁盘上\n"
+                "   对应的 sealed binary。若还知道位置，请手动清理。\n"
+                "\n此操作不触发系统授权弹窗。"
+            )
+        msg += action_summary
 
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Warning)
@@ -285,6 +316,7 @@ class RunnerListWindow(QWidget):
         if box.clickedButton() is not btn_del:
             return
 
+        # --- 步骤①：删 keychain K ---
         try:
             delete_runner(svc, acct)
         except subprocess.CalledProcessError as e:
@@ -295,5 +327,16 @@ class RunnerListWindow(QWidget):
         except Exception as e:  # noqa: BLE001
             QMessageBox.critical(self, "cmdseal", f"意外错误：{e}")
             return
+
+        # --- 步骤②：联动删磁盘 binary（失败不回滚，只提示）---
+        if binary_exists and binary_path is not None:
+            try:
+                os.unlink(binary_path)
+            except OSError as e:
+                QMessageBox.warning(
+                    self, "cmdseal",
+                    f"K 已删除，但磁盘文件删除失败：\n"
+                    f"{binary_path}\n\n{e}\n\n"
+                    f"请手动删除该文件（已不能再解密运行）。")
 
         self.refresh()
