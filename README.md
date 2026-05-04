@@ -3,6 +3,8 @@
 > *Capability gateways for the AI agent era.*
 > *Give your AI agent the ability to call sensitive commands, without giving it the secrets.*
 
+[中文版](./README.zh.md)
+
 This is the **proof-of-concept** implementation that validates the end-to-end
 security chain described in [../DESIGN.md](../DESIGN.md):
 

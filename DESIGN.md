@@ -3,6 +3,8 @@
 > *Capability gateways for the AI agent era.*
 > *Give your AI agent the ability to call sensitive commands, without giving it the secrets.*
 
+[中文版](./DESIGN.zh.md)
+
 ---
 
 ## 1. Why this tool exists
