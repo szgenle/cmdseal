@@ -1,0 +1,9 @@
+# build artifacts
+_build/
+
+# python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
