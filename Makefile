@@ -85,7 +85,11 @@ app: sync-pkg ## 打包 .app（需 packaging 依赖）
 		--windowed \
 		--noconfirm \
 		--paths $(PROJECT_ROOT) \
-		gui/__main__.py
+		--collect-submodules gui \
+		--add-data cmdseal.py:assets \
+		--add-data cmdseal_helper.c:assets \
+		--add-data runner_aead_template.c:assets \
+		run_gui.py
 
 # ---------------------------------------------------------------------------
 # 清理

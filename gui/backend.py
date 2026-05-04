@@ -4,17 +4,63 @@
 - GUI 不复制加密逻辑，全部交给项目根目录的 cmdseal.py
 - secret 通过 stdin 以 NAME=VALUE 行喂入（见 cmdseal.py --secrets-from-stdin）
 - 这里只提供启动子进程与收集输出的辅助函数，实际在主窗口接线时使用
+
+资产路径解析：
+- 开发时（非冻结）：直接用仓库根下的 cmdseal.py；sys.executable 即当前 venv 的 python
+- 打包后（sys.frozen）：PyInstaller 把三份资产打到 _MEIPASS/assets/，但
+  _MEIPASS 是只读，而 cmdseal.py 要在 SCRIPT_DIR/_build/ 下编译 helper——
+  所以首次启动时把三份资产镜像到 ~/Library/Application Support/cmdseal/
+  （按 mtime 对比，版本升级时自动覆盖）。sys.executable 指向 app bootloader——
+  改走系统 /usr/bin/python3（cmdseal.py 纯 stdlib，无第三方依赖）。
 """
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CMDSEAL_PY = PROJECT_ROOT / "cmdseal.py"
+# 打包后镜像到的用户可写目录（跟 macOS HIG 建议的位置）
+_APP_SUPPORT = Path.home() / "Library" / "Application Support" / "cmdseal"
+_ASSET_NAMES = ("cmdseal.py", "cmdseal_helper.c", "runner_aead_template.c")
+
+
+def _sync_asset(src: Path, dst: Path) -> None:
+    """按 mtime 和大小决定是否覆盖。避免每次启动都重复拷贝。"""
+    if dst.is_file():
+        s = src.stat()
+        d = dst.stat()
+        if s.st_size == d.st_size and int(s.st_mtime) <= int(d.st_mtime):
+            return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+
+
+def _resolve_runtime() -> tuple[Path, Path, str]:
+    """返回 (PROJECT_ROOT, CMDSEAL_PY, PYTHON_EXE)。
+
+    开发时：直接用仓库根；打包后：用 ~/Library/Application Support/cmdseal/
+    作为工作根，用系统 python3 跑 cmdseal.py。
+    """
+    if getattr(sys, "frozen", False):
+        meipass = Path(getattr(sys, "_MEIPASS", ""))
+        asset_dir = meipass / "assets"
+        work_root = _APP_SUPPORT
+        work_root.mkdir(parents=True, exist_ok=True)
+        for name in _ASSET_NAMES:
+            src = asset_dir / name
+            if src.is_file():
+                _sync_asset(src, work_root / name)
+        python_exe = shutil.which("python3") or "/usr/bin/python3"
+        return work_root, work_root / "cmdseal.py", python_exe
+
+    project_root = Path(__file__).resolve().parent.parent
+    return project_root, project_root / "cmdseal.py", sys.executable
+
+
+PROJECT_ROOT, CMDSEAL_PY, PYTHON_EXE = _resolve_runtime()
 
 
 @dataclass
@@ -32,7 +78,7 @@ class SealRequest:
 def build_argv(req: SealRequest) -> list[str]:
     sub = "rotate" if req.rotate else "seal"
     argv: list[str] = [
-        sys.executable,
+        PYTHON_EXE,
         str(CMDSEAL_PY),
         sub,
         "--command", req.command,
