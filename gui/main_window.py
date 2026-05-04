@@ -33,8 +33,8 @@ class MainWindow(QMainWindow):
         title.setFont(f)
 
         subtitle = QLabel(
-            "把一条命令密封进 AEAD 加密的二进制；密钥只存在于 keychain，"
-            "且仅允许该二进制读取。"
+            "把一条命令密封进 AEAD 加密的二进制；\n"
+            "密钥只存在于 keychain，且仅允许该二进制读取。"
         )
         subtitle.setAlignment(Qt.AlignCenter)
         subtitle.setWordWrap(True)
