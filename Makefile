@@ -15,7 +15,7 @@ PROJECT_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
 UV       ?= uv
 PY       := $(UV) run python
-QT_HEADLESS := QT_QPA_PLATFORM=minimal
+QT_HEADLESS := QT_QPA_PLATFORM=offscreen
 
 .DEFAULT_GOAL := help
 
@@ -52,13 +52,15 @@ upgrade: ## 升级所有依赖并同步 venv
 run: ## 启动 GUI（python -m gui）
 	$(PY) -m gui
 
-smoke: ## 无头自检：构造主窗口后立刻退出
+smoke: ## 无头自检：构造主窗口 + seal 向导后立刻退出
 	$(QT_HEADLESS) $(PY) -c "from PySide6.QtCore import QTimer; \
 from PySide6.QtWidgets import QApplication; \
 from gui.main_window import MainWindow; \
+from gui.seal_wizard import SealWizard; \
 from gui import backend; \
 app=QApplication([]); w=MainWindow(); w.show(); \
-QTimer.singleShot(100, app.quit); \
+wz=SealWizard(); wz.show(); \
+QTimer.singleShot(200, app.quit); \
 rc=app.exec(); \
 print('smoke: exit=', rc, 'backend_ok=', backend.CMDSEAL_PY.is_file())"
 
