@@ -8,5 +8,5 @@ __pycache__/
 # macOS
 .DS_Store
 
-# 内部工作日志（不对外开源）
-NEXT.md
+# 预研目录（测试计划、fixture、探针代码、NEXT.md 工作日志、实验产物，全部不入库）
+research/
