@@ -17,5 +17,5 @@ research/
 
 # demo/ 下的本机 seal 产物（cdhash + login.keychain 绑定当前机器，对别人无用）
 # 示例输入文本（demo/demo_zip_input.txt 等纯文本素材）照常入库
-demo/zipany
+demo/seal_zip
 demo/*.fixture

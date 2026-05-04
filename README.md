@@ -85,15 +85,15 @@ as sample input; the flow below is copy-paste runnable on your
 machine:
 
 ```bash
-# 1) Seal an encrypted-zip command as demo/zipany. You will be
+# 1) Seal an encrypted-zip command as demo/seal_zip. You will be
 #    prompted twice for the value of `zippw` (say 'hunter2'):
 python3 cmdseal.py seal \
     --command 'zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}' \
-    --output  ./demo/zipany
+    --output  ./demo/seal_zip
 
 # 2) Use it to compress demo/demo_zip_input.txt into a
 #    password-protected /tmp/out.zip:
-./demo/zipany /tmp/out.zip ./demo/demo_zip_input.txt
+./demo/seal_zip /tmp/out.zip ./demo/demo_zip_input.txt
 # First run: ONE macOS partition-list dialog
 # (login password + "Always Allow"). A one-time cost to bind the
 # keychain item to this binary's cdhash. Subsequent runs: silent,
@@ -104,10 +104,10 @@ unzip /tmp/out.zip -d /tmp/out
 # → [/tmp/out.zip] demo_zip_input.txt password: ← requires hunter2
 
 # 4) Verify the password was NOT baked into the binary in plaintext:
-strings ./demo/zipany | grep -F 'hunter2' && echo FAIL || echo 'PASS: secret not in strings'
+strings ./demo/seal_zip | grep -F 'hunter2' && echo FAIL || echo 'PASS: secret not in strings'
 ```
 
-The payoff: step 2's `./demo/zipany` can be handed to an on-device
+The payoff: step 2's `./demo/seal_zip` can be handed to an on-device
 AI agent or a scripted pipeline. Neither can read `zippw`, and
 neither can bypass the keychain ACL to fetch it directly:
 
@@ -118,7 +118,7 @@ neither can bypass the keychain ACL to fetch it directly:
 ```
 
 > If you forgot the `cmdseal.<hash>.K` service name printed at seal
-> time, recover it with `strings ./demo/zipany | grep cmdseal`.
+> time, recover it with `strings ./demo/seal_zip | grep cmdseal`.
 
 ## Rotate the key without rebuilding the template
 

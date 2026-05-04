@@ -76,14 +76,14 @@ python3 cmdseal.py seal \
 作为输入素材，以下流程可直接复制粘贴到你本机跑：
 
 ```bash
-# 1）封存一个加密压缩命令为 demo/zipany。交互式输入自定义密码：
+# 1）封存一个加密压缩命令为 demo/seal_zip。交互式输入自定义密码：
 python3 cmdseal.py seal \
     --command 'zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}' \
-    --output  ./demo/zipany
+    --output  ./demo/seal_zip
 # → 两次提示输入 zippw 的值，比如 'hunter2'
 
 # 2）用它把 demo/demo_zip_input.txt 压成有密码保护的 out.zip：
-./demo/zipany /tmp/out.zip ./demo/demo_zip_input.txt
+./demo/seal_zip /tmp/out.zip ./demo/demo_zip_input.txt
 # 首次运行：弹一次 macOS partition-list 系统框
 #  （登录密码 + “始终允许”）— 这是绑定 cdhash 的一次性开销
 # 后续运行：完全静默，约毫秒级返回
@@ -93,10 +93,10 @@ unzip /tmp/out.zip -d /tmp/out
 # → [/tmp/out.zip] demo_zip_input.txt password: ← 必须输 hunter2 才能解出
 
 # 4）验证密码未被明文烘进二进制：
-strings ./demo/zipany | grep -F 'hunter2' && echo FAIL || echo 'PASS: 密码未泄露'
+strings ./demo/seal_zip | grep -F 'hunter2' && echo FAIL || echo 'PASS: 密码未泄露'
 ```
 
-核心卖点：第 2 步拿到的 `./demo/zipany` 可以交给设备上的 AI
+核心卖点：第 2 步拿到的 `./demo/seal_zip` 可以交给设备上的 AI
 智能体或脚本管道任意调用，而它们既看不到 `zippw` 的值，也
 绕不过 keychain ACL 直接读取它：
 
@@ -107,7 +107,7 @@ strings ./demo/zipany | grep -F 'hunter2' && echo FAIL || echo 'PASS: 密码未�
 ```
 
 > 如果你找不到封存时打出的 `cmdseal.<hash>.K`，可以用
-> `strings ./demo/zipany | grep cmdseal` 重新拿到完整名称。
+> `strings ./demo/seal_zip | grep cmdseal` 重新拿到完整名称。
 
 ## 无需重新构建模板即可轮换密钥
 
