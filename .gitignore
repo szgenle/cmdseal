@@ -14,3 +14,8 @@ dist/
 
 # 预研目录（测试计划、fixture、探针代码、NEXT.md 工作日志、实验产物，全部不入库）
 research/
+
+# demo/ 下的本机 seal 产物（cdhash + login.keychain 绑定当前机器，对别人无用）
+# 示例输入文本（demo/demo_zip_input.txt 等纯文本素材）照常入库
+demo/zipany
+demo/*.fixture

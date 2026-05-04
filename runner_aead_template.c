@@ -14,7 +14,10 @@
  *      with K and a random 12-byte nonce, and hardcodes the
  *      resulting nonce || ciphertext || tag into this file.
  *   3. At runtime, this binary fetches K from keychain, decrypts the
- *      embedded ciphertext, and execvp()s the resulting command.
+ *      embedded ciphertext, and execv()s the resulting command.
+ *      v1.1 hardening: env DYLD_* and LD_* are stripped before
+ *      execv (#3), and the first token MUST be an absolute path
+ *      — no PATH lookup happens at runtime (#2).
  *      If decryption fails (auth tag mismatch), it aborts — so an
  *      attacker who silently swaps the keychain value for a known K'
  *      cannot redirect execution.
@@ -31,6 +34,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <crt_externs.h>   /* _NSGetEnviron on macOS */
 #include <Security/Security.h>
 #include <CommonCrypto/CommonCryptor.h>
 
@@ -83,6 +87,47 @@ static const unsigned char TAG[] = /* @@TAG@@ */ {
 static void die(const char *msg, int rc) {
     fprintf(stderr, "cmdseal: %s\n", msg);
     exit(rc);
+}
+
+/* v1.1 #3: strip DYLD_* and LD_* from our environment BEFORE
+ * decrypting or exec'ing. The hardened runtime (v1.1 #4) makes dyld
+ * ignore these for THIS binary; this unsetenv makes sure the child
+ * process we execv() does not inherit a caller's injection attempt
+ * either. Defence in depth — does nothing when the caller was
+ * already honest, costs ~microseconds otherwise. */
+static void strip_dangerous_env(void) {
+    char ***envp = _NSGetEnviron();
+    if (!envp || !*envp) return;
+    /* First pass: collect keys. Do not unsetenv() while iterating
+     * because it mutates the environ array. */
+    size_t cap = 16, n = 0;
+    char **keys = (char **)malloc(cap * sizeof(char *));
+    if (!keys) return;
+    for (char **e = *envp; *e; e++) {
+        const char *eq = strchr(*e, '=');
+        if (!eq) continue;
+        size_t klen = (size_t)(eq - *e);
+        int dangerous =
+            (klen >= 5 && strncmp(*e, "DYLD_", 5) == 0) ||
+            (klen >= 3 && strncmp(*e, "LD_",   3) == 0);
+        if (!dangerous) continue;
+        if (n == cap) {
+            cap *= 2;
+            char **nk = (char **)realloc(keys, cap * sizeof(char *));
+            if (!nk) { free(keys); return; }
+            keys = nk;
+        }
+        char *k = (char *)malloc(klen + 1);
+        if (!k) continue;
+        memcpy(k, *e, klen);
+        k[klen] = '\0';
+        keys[n++] = k;
+    }
+    for (size_t i = 0; i < n; i++) {
+        unsetenv(keys[i]);
+        free(keys[i]);
+    }
+    free(keys);
 }
 
 static int hex_decode(const char *hex, size_t hexlen,
@@ -145,6 +190,9 @@ static char *fetch_key_hex(UInt32 *out_len) {
 
 int main(int argc, char *argv[]) {
     (void)LABEL;
+
+    /* v1.1 #3: drop dylib-injection vectors from env before anything. */
+    strip_dangerous_env();
 
     /* 1. Fetch K from keychain. */
     UInt32 keyhex_len = 0;
@@ -235,10 +283,24 @@ int main(int argc, char *argv[]) {
 
     if (!out_argv[0] || !*out_argv[0]) die("empty program name", 2);
 
-    /* 4. Go. (pt stays allocated — out_argv points into it.) */
-    execvp(out_argv[0], out_argv);
+    /* v1.1 #2: refuse PATH-based lookup. The first token must be an
+     * absolute path so we know EXACTLY which binary runs. cmdseal.py
+     * resolves non-absolute program names via shutil.which() at seal
+     * time, so reaching here with a relative path means the sealed
+     * blob was hand-crafted or the generator is older than v1.1. */
+    if (out_argv[0][0] != '/') {
+        fprintf(stderr,
+            "cmdseal: sealed command's program is not an absolute "
+            "path (got '%s'). Rerun cmdseal seal with a v1.1+ "
+            "generator so the absolute path is baked in.\n",
+            out_argv[0]);
+        return 126;
+    }
 
-    fprintf(stderr, "cmdseal: execvp('%s') failed: %s\n",
+    /* 4. Go. (pt stays allocated — out_argv points into it.) */
+    execv(out_argv[0], out_argv);
+
+    fprintf(stderr, "cmdseal: execv('%s') failed: %s\n",
             out_argv[0], strerror(errno));
     return 127;
 }

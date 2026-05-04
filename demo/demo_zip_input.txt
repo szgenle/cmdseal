@@ -1,0 +1,4 @@
+hello from cmdseal
+this file will be zipped with a sealed password.
+zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}
+line 3.

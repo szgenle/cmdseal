@@ -1,148 +1,241 @@
-# cmdseal (PoC)
+# cmdseal
 
 > *Capability gateways for the AI agent era.*
-> *Give your AI agent the ability to call sensitive commands, without giving it the secrets.*
+> *Give your AI agent the ability to call sensitive commands without giving it the secrets.*
 
-[中文版](./README.zh.md)
+[中文版](./README.zh.md) · [DESIGN.md](./DESIGN.md)
 
-This is the **proof-of-concept** implementation that validates the end-to-end
-security chain described in [../DESIGN.md](../DESIGN.md):
+`cmdseal` turns a command template plus secret values into a standalone
+macOS binary. The binary can execute the exact command it was sealed
+with — and *only* that command — without revealing the secret, even to
+the user who runs it.
 
 ```
-command template  →  generated C source  →  ad-hoc signed binary
-                                                ↓
-                                       Keychain ACL bound to THIS binary
+command template  ─┐
+secret values  ────┼─►  AEAD-sealed runner (C)  ──►  ad-hoc signed binary
+                   │                                     │
+                   └──  AES-256 key K  ──►  login.keychain ACL bound to THIS binary's cdhash
 ```
 
-macOS only. No GUI yet — that will be built on top of `cmdseal.py` once
-the core chain is proven.
+Use case: you want an on-device AI agent (or a scripted pipeline) to be
+able to call `zhmm_cmd --pwd ... --search <term>` without the agent
+ever seeing the master password.
+
+## Status
+
+- ✅ CLI end-to-end working (macOS 13+, tested on 14 / 15 / 26)
+- ✅ GUI (PySide6) seal wizard — optional, launches from the same repo
+- ✅ `.app` bundle via `make app` (PyInstaller)
+- ⚠️ macOS only for now (Linux / Windows are future work)
+- ⚠️ Distributed as **source**; no Developer ID signed release yet
 
 ## Requirements
 
-- macOS (tested on darwin 24+)
-- `cc` (from Xcode Command Line Tools)
-- `codesign`
-- `/usr/bin/security`
-- Python 3.8+
+- macOS (Apple Silicon or Intel; tested on darwin 24+)
+- Xcode Command Line Tools (`cc`, `codesign`)
+- `/usr/bin/security` (ships with macOS)
+- Python 3.11+ (CLI only uses stdlib)
+- [`uv`](https://github.com/astral-sh/uv) — for the GUI / `.app` build
+  (skip if you only use the CLI)
 
-## Quick start
+## Quick start (CLI)
 
 ```bash
+git clone https://codeup.aliyun.com/szgenle/cmdseal.git
 cd cmdseal
 
-# Seal an `echo` command that takes one secret and one runtime arg.
-python3 cmdseal.py \
-    --output ./demo_sealed \
-    --command 'echo {{secret:mypass}} {{arg:1}}'
-# → prompts for the value of `mypass` (twice), then builds ./demo_sealed
+# Seal a zip-with-password command. `zippw` is collected interactively
+# and baked into the AEAD ciphertext; it is never stored in plaintext.
+python3 cmdseal.py seal \
+    --command 'zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}' \
+    --output  ./seal_zip
+# → two password prompts (value + confirm), then ./seal_zip is built
 
-# Run it:
-./demo_sealed hello-from-caller
-# First run will pop ONE keychain prompt — click "Always Allow".
-# From then on: silent.
-# Output:  <the_password_you_entered> hello-from-caller
+# Use it — just two positional args now, no password on the command line.
+./seal_zip  out.zip  /path/to/secret.txt
+# First run on a freshly-generated binary: ONE macOS system dialog
+# (login password + "Always Allow"). All subsequent runs: silent
+# and millisecond-fast.
 ```
+
+The first-run dialog is the macOS partition-list handshake binding the
+keychain item to this binary's cdhash. It happens once per sealed
+binary per user; `cmdseal` itself never asks for a password again.
 
 ## Placeholder reference
 
-| Placeholder         | Resolved at | Source                                |
-| ------------------- | ----------- | ------------------------------------- |
-| `{{secret:NAME}}`   | runtime     | `cmdseal.<hash>.NAME` in Keychain     |
-| `{{arg:N}}`         | runtime     | `argv[N]` of the generated binary     |
-| any other token     | —           | literal, passed through unchanged     |
+| Placeholder       | Resolved at  | Source                                 |
+| ----------------- | ------------ | -------------------------------------- |
+| `{{secret:NAME}}` | seal time    | prompted, baked into AEAD ciphertext   |
+| `{{arg:N}}`       | runtime      | `argv[N]` of the generated binary      |
+| any other token   | —            | passed through verbatim                |
 
-Placeholders must occupy a **whole argv position** — mixed tokens like
-`"--pwd={{secret:x}}"` are rejected. Split them into two tokens instead:
+Placeholders must occupy a **whole argv position**. Mixed tokens like
+`"--pwd={{secret:x}}"` are rejected; split them:
 `--pwd {{secret:x}}`.
 
-## A realistic example (the motivating use case)
+If you write a bare program name (e.g. `zip`), `cmdseal seal` resolves
+it to an absolute path via `shutil.which` at seal time and bakes that
+path in. The runner refuses `$PATH` lookup (see §Security model).
+
+## A reproducible end-to-end example
+
+The repo ships [`demo/demo_zip_input.txt`](./demo/demo_zip_input.txt)
+as sample input; the flow below is copy-paste runnable on your
+machine:
 
 ```bash
-python3 cmdseal.py \
-    --output ~/bin/zhmm_fetch \
-    --command 'zhmm_cmd -i /Users/ws/szdoc/zhmm/zhmm.gl.gl \
-               --openId olQ0e7SL_98gbj2lqV_zki-Vjxco \
-               --pwd {{secret:master}} \
-               --search {{arg:1}} \
-               --once'
+# 1) Seal an encrypted-zip command as demo/zipany. You will be
+#    prompted twice for the value of `zippw` (say 'hunter2'):
+python3 cmdseal.py seal \
+    --command 'zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}' \
+    --output  ./demo/zipany
+
+# 2) Use it to compress demo/demo_zip_input.txt into a
+#    password-protected /tmp/out.zip:
+./demo/zipany /tmp/out.zip ./demo/demo_zip_input.txt
+# First run: ONE macOS partition-list dialog
+# (login password + "Always Allow"). A one-time cost to bind the
+# keychain item to this binary's cdhash. Subsequent runs: silent,
+# sub-second.
+
+# 3) Verify the archive really is password-protected:
+unzip /tmp/out.zip -d /tmp/out
+# → [/tmp/out.zip] demo_zip_input.txt password: ← requires hunter2
+
+# 4) Verify the password was NOT baked into the binary in plaintext:
+strings ./demo/zipany | grep -F 'hunter2' && echo FAIL || echo 'PASS: secret not in strings'
 ```
 
-Then the home AI agent can invoke:
+The payoff: step 2's `./demo/zipany` can be handed to an on-device
+AI agent or a scripted pipeline. Neither can read `zippw`, and
+neither can bypass the keychain ACL to fetch it directly:
 
 ```bash
-~/bin/zhmm_fetch "gmail"
+# An agent trying to exfiltrate via the CLI:
+/usr/bin/security find-generic-password -s cmdseal.<hash>.K -w
+# → GUI approval prompt the agent cannot click through. Denied.
 ```
 
-…and the master password is never visible in the argv list, never written
-to disk in plaintext, never transmitted. If the agent tries to read it
-directly:
+> If you forgot the `cmdseal.<hash>.K` service name printed at seal
+> time, recover it with `strings ./demo/zipany | grep cmdseal`.
+
+## Rotate the key without rebuilding the template
 
 ```bash
-/usr/bin/security find-generic-password -s cmdseal.<hash>.master -w
-# → GUI prompt. Agent cannot click "Allow". Denied.
+python3 cmdseal.py rotate ./seal_zip
+# Generates a fresh AES-256 key, rewrites the AEAD ciphertext,
+# re-signs the binary, swaps the keychain item atomically.
+# No user interaction — runs silently in ~1s.
 ```
+
+## GUI (optional)
+
+If you prefer clicking:
+
+```bash
+make sync            # install PySide6 into a local uv venv
+make run             # launches the seal wizard
+```
+
+Or build a double-clickable `.app`:
+
+```bash
+make app             # produces dist/cmdseal.app
+open dist/cmdseal.app
+```
+
+The GUI is a thin wrapper over `cmdseal.py`; no crypto code is
+duplicated. See [`gui/`](./gui/) for the sources.
+
+## Security model
+
+### What cmdseal protects against
+
+- **Secret exfiltration via the sealed binary's argv or `ps`** — the
+  secret is in AEAD ciphertext embedded in the binary; it only exists
+  in decrypted form inside the runner's address space for the brief
+  window between keychain fetch and `execv`.
+- **A different process (even the same user) reading the keychain
+  item** — macOS partition-list / ACL bind the item to this exact
+  binary's cdhash. Verified against `/usr/bin/security`, unrelated
+  ad-hoc signed probes, and bitwise-identical copies — all blocked.
+- **PATH-based program substitution** — the runner uses `execv` with
+  an absolute path baked in at seal time (v1.1 #2); there is no
+  runtime `$PATH` lookup.
+- **Dylib injection via environment** — the runner strips `DYLD_*`
+  and `LD_*` from its environment before `execv` (v1.1 #3), and is
+  signed with `codesign --options runtime` (v1.1 #4) so dyld itself
+  ignores those variables for this binary.
+
+### What cmdseal does **not** protect against
+
+- A **root** attacker, or any code running as root (can read any
+  process memory, any keychain).
+- A process running as the **same user** that gains arbitrary code
+  execution and debugs / dumps the running sealed binary.
+- Tampering with the generating machine before the binary was built.
+- Snapshot / side-channel attacks on the target command (e.g. `zip`
+  itself writing the password to some log; that's `zip`'s
+  responsibility, not ours).
+- Anything on Linux or Windows.
+
+Be honest with yourself about the threat model before relying on
+`cmdseal`. It is a **capability gateway**, not a vault.
+
+See [DESIGN.md](./DESIGN.md) for the full threat model, the
+partition-list empirical findings, and the rationale behind Plan D
+(the current scheme).
 
 ## Housekeeping
 
 ```bash
-# Inspect the keychain entry (metadata only):
-security find-generic-password -s cmdseal.<hash>.master -g
+# Inspect the keychain entry for a sealed binary (metadata only):
+security find-generic-password -s cmdseal.<hash>.K
 
 # Remove the entry (e.g. when retiring a binary):
-security delete-generic-password -s cmdseal.<hash>.master
+security delete-generic-password -s cmdseal.<hash>.K
 
-# Inspect the binary's embedded placeholders (no secrets in there):
-strings ./demo_sealed | grep cmdseal
+# Inspect the sealed binary's metadata (no secrets visible):
+strings ./seal_zip | grep cmdseal
 ```
 
-## Current limitations (v1 PoC)
+## Distribution policy
 
-- **First-use prompt on the sealed binary itself.** Due to the macOS
-  partition-list mechanism, the owner must click "Always Allow" once
-  the first time the sealed binary runs. Subsequent invocations are
-  silent, which is what the AI agent needs. Fixing this (so that no
-  prompt is shown even on first use) is planned for v2.
-- No registry of sealed binaries → you have to remember which service
-  prefix belongs to which binary (look at `strings` or keep notes).
-- No automatic cleanup of keychain entries when a binary is deleted.
-- No update command (`cmdseal rotate <binary>` to change the secret
-  without rebuilding) — planned.
-- No argument whitelist / regex validation — planned.
-- No audit log — planned.
-- Side-channel hardening is not yet done: the sealed binary still uses
-  `execvp` (PATH-searched) and passes secrets via argv of the target
-  command, so a same-user attacker with `$PATH` write access or a
-  tight `ps -E` polling loop can intercept. Planned v1.1 work.
-- macOS only. Linux (`libsecret`) and Windows (DPAPI) are future work.
+We **do not** ship pre-built binaries. The sealing model is
+per-machine (cdhash + your login keychain), so a binary built on
+someone else's machine would be useless to you anyway. To use
+`cmdseal`:
 
-## Signing mode vs. enforcement strength
+1. `git clone` the repo,
+2. audit what you want to audit,
+3. `make app` if you want a GUI, or use `cmdseal.py` directly for
+   scripting.
 
-Verified non-interactively (see `acl_test.py`): **even under ad-hoc
-signing, the Keychain ACL blocks any other caller** — `/usr/bin/security`,
-a different ad-hoc signed binary, and a bytewise-identical copy of the
-sealed binary all trigger a GUI prompt that an unattended AI agent
-cannot dismiss.
+If you want Developer-ID-signed notarized `.app` releases on GitHub,
+[open an issue](https://codeup.aliyun.com/szgenle/cmdseal/issues) —
+it is gated on the maintainer joining the Apple Developer Program.
 
-| Signing mode                        | Flag                                                             | Enforcement  | Recommended for                   |
-| ----------------------------------- | ---------------------------------------------------------------- | ------------ | --------------------------------- |
-| Ad-hoc (default)                    | *(none)*                                                         | ✅ works     | Personal / single-machine use     |
-| Developer ID (paid Apple program)   | `--signing-identity "Developer ID Application: Name (TEAMID)"`   | ✅ + tighter | Distributed / shared builds       |
+## Known limitations
 
-Developer ID is optional hardening, not a prerequisite. For the
-home-agent threat model that motivated `cmdseal`, ad-hoc is sufficient.
+- **First-run prompt on each sealed binary.** See §Quick start.
+- **No registry** of which `cmdseal.<hash>.K` service belongs to
+  which binary beyond `strings <binary> | grep cmdseal`.
+- **No automatic cleanup** of keychain items when a sealed binary is
+  deleted. Planned: a `cmdseal gc` subcommand.
+- **No argument whitelisting** — `{{arg:N}}` is passed to the target
+  command verbatim. If the target command is picky about what values
+  it accepts, that is on the target.
+- **macOS only.** Linux (`libsecret`) / Windows (DPAPI) are future
+  work; no ETA.
 
-```bash
-# Ad-hoc (default) is already fine for most users.
-python3 cmdseal.py --output ./fetch_pwd --command '...'
+## License
 
-# Developer ID, if you have one and want the stronger designated
-# requirement on the ACL.
-python3 cmdseal.py \
-    --signing-identity "Developer ID Application: Jane Doe (ABCDE12345)" \
-    --output ./fetch_pwd \
-    --command '...'
-```
+[MIT](./LICENSE) — do what you want, attribution appreciated, no
+warranty.
 
-See [../DESIGN.md](../DESIGN.md) §8 for the full empirical findings and
-the methodology correction (earlier drafts reported a false negative
-caused by the operator clicking through prompts during manual tests).
+## Related
+
+- [DESIGN.md](./DESIGN.md) — architecture and design decisions
+- [DESIGN.zh.md](./DESIGN.zh.md) — 中文设计说明
+- Author: [szgenle.com](https://szgenle.com)

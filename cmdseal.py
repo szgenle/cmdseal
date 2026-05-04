@@ -106,6 +106,7 @@ def ensure_helper_built():
     ])
     run([
         "codesign", "-s", "-", "--force", "--timestamp=none",
+        "--options", "runtime",    # hardened runtime: dyld drops DYLD_* env
         str(HELPER_BIN),
     ])
 
@@ -151,6 +152,38 @@ def tokenize_command(command_str):
     if not raw:
         sys.exit("cmdseal: --command must contain at least a program name")
     return [classify_token(t) for t in raw]
+
+
+def resolve_program_path(tokens):
+    """v1.1 #2: force the first token (program to exec) to be an
+    absolute path. The sealed runner refuses PATH lookup, so we must
+    bake a `/usr/bin/zip`-style path into the AEAD blob.
+
+    If the user wrote e.g. `zip -j -P ...`, we call shutil.which('zip')
+    at seal time and substitute the resolved absolute path. If the
+    first token is itself a placeholder, bail out — that would mean
+    the program name is user-controlled at runtime, which defeats the
+    whole point of sealing a specific command.
+    """
+    if not tokens:
+        return tokens
+    first_kind, first_payload = tokens[0]
+    if first_kind != "literal":
+        sys.exit(
+            "cmdseal: the first token (program name) cannot be a "
+            f"{first_kind} placeholder. Write the program path "
+            "literally, e.g. '/usr/bin/zip'."
+        )
+    if first_payload.startswith("/"):
+        return tokens
+    resolved = shutil.which(first_payload)
+    if resolved is None:
+        sys.exit(
+            f"cmdseal: program {first_payload!r} not found in $PATH. "
+            "Either install it or write an absolute path in --command."
+        )
+    print(f"[info] resolved {first_payload!r} -> {resolved!r}")
+    return [("literal", resolved)] + list(tokens[1:])
 
 
 # ----------------------------------------------------------------------
@@ -398,6 +431,7 @@ def build_and_sign(src_text, output_path, signing_identity, do_sign):
         run([
             "codesign", "-s", signing_identity,
             "--force", "--timestamp=none",
+            "--options", "runtime",    # hardened runtime (v1.1 #4)
             str(output_path),
         ])
     else:
@@ -441,6 +475,8 @@ def do_seal(args, *, old_service_to_delete=None):
 
     # 1. Tokenise + gather secrets.
     tokens = tokenize_command(args.command)
+    # v1.1 #2: resolve non-absolute program name at seal time.
+    tokens = resolve_program_path(tokens)
     secret_names = sorted({payload for kind, payload in tokens
                            if kind == "secret"})
     secret_values = collect_secrets(secret_names, args.secrets_from_stdin)

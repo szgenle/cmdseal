@@ -73,7 +73,7 @@ helper: ## 手动编译 + ad-hoc 签名 cmdseal_helper
 	cc -O2 -Wall -Wno-deprecated-declarations \
 		-o _build/cmdseal_helper cmdseal_helper.c \
 		-framework Security -framework CoreFoundation
-	codesign -s - --force --timestamp=none _build/cmdseal_helper
+	codesign -s - --force --timestamp=none --options runtime _build/cmdseal_helper
 
 # ---------------------------------------------------------------------------
 # 打包（pyinstaller，骨架，后续再补 spec 文件）
