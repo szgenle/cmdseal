@@ -1,0 +1,97 @@
+# cmdseal — 开发任务入口
+#
+# 常用：
+#   make             查看所有目标
+#   make sync        安装运行时依赖（PySide6）
+#   make run         启动 GUI
+#   make smoke       无头烟囱测试（CI/本地自检）
+#   make helper      编译 cmdseal_helper（CLI 首次运行会自动触发，这里供手动）
+#   make app         使用 pyinstaller 打包 .app（需 make sync-pkg 先拉依赖）
+#   make clean       清构建产物（_build/、dist/、build/）
+#   make distclean   清 .venv 与锁缓存（重装前用）
+
+SHELL := /bin/zsh
+PROJECT_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+
+UV       ?= uv
+PY       := $(UV) run python
+QT_HEADLESS := QT_QPA_PLATFORM=minimal
+
+.DEFAULT_GOAL := help
+
+# ---------------------------------------------------------------------------
+# help
+# ---------------------------------------------------------------------------
+.PHONY: help
+help:
+	@awk 'BEGIN {FS = ":.*##"; printf "目标：\n"} \
+		/^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' \
+		$(MAKEFILE_LIST)
+
+# ---------------------------------------------------------------------------
+# 依赖管理（uv）
+# ---------------------------------------------------------------------------
+.PHONY: sync sync-pkg lock upgrade
+sync: ## 安装运行时依赖（PySide6）
+	$(UV) sync
+
+sync-pkg: ## 安装运行时依赖 + 打包分组（pyinstaller）
+	$(UV) sync --group packaging
+
+lock: ## 刷新 uv.lock（不升级）
+	$(UV) lock
+
+upgrade: ## 升级所有依赖并同步 venv
+	$(UV) lock --upgrade
+	$(UV) sync
+
+# ---------------------------------------------------------------------------
+# 运行 / 自检
+# ---------------------------------------------------------------------------
+.PHONY: run smoke
+run: ## 启动 GUI（python -m gui）
+	$(PY) -m gui
+
+smoke: ## 无头自检：构造主窗口后立刻退出
+	$(QT_HEADLESS) $(PY) -c "from PySide6.QtCore import QTimer; \
+from PySide6.QtWidgets import QApplication; \
+from gui.main_window import MainWindow; \
+from gui import backend; \
+app=QApplication([]); w=MainWindow(); w.show(); \
+QTimer.singleShot(100, app.quit); \
+rc=app.exec(); \
+print('smoke: exit=', rc, 'backend_ok=', backend.CMDSEAL_PY.is_file())"
+
+# ---------------------------------------------------------------------------
+# C helper（供 cmdseal.py 调用；日常无需手动）
+# ---------------------------------------------------------------------------
+.PHONY: helper
+helper: ## 手动编译 + ad-hoc 签名 cmdseal_helper
+	@mkdir -p _build
+	cc -O2 -Wall -Wno-deprecated-declarations \
+		-o _build/cmdseal_helper cmdseal_helper.c \
+		-framework Security -framework CoreFoundation
+	codesign -s - --force --timestamp=none _build/cmdseal_helper
+
+# ---------------------------------------------------------------------------
+# 打包（pyinstaller，骨架，后续再补 spec 文件）
+# ---------------------------------------------------------------------------
+.PHONY: app
+app: sync-pkg ## 打包 .app（需 packaging 依赖）
+	$(UV) run pyinstaller \
+		--name cmdseal \
+		--windowed \
+		--noconfirm \
+		--paths $(PROJECT_ROOT) \
+		gui/__main__.py
+
+# ---------------------------------------------------------------------------
+# 清理
+# ---------------------------------------------------------------------------
+.PHONY: clean distclean
+clean: ## 删除构建产物（_build/ build/ dist/ __pycache__/）
+	rm -rf _build build dist
+	find . -type d -name __pycache__ -not -path './.venv/*' -exec rm -rf {} +
+
+distclean: clean ## 额外清 .venv（重装前用）
+	rm -rf .venv uv.lock

@@ -4,6 +4,10 @@ _build/
 # python
 __pycache__/
 *.pyc
+.venv/
+*.egg-info/
+build/
+dist/
 
 # macOS
 .DS_Store
