@@ -1,6 +1,11 @@
-"""主窗口：当前只是一个启动器，负责拉起 seal 向导。
+"""主窗口：启动器。
 
-后续会在这里再接：rotate 向导、最近生成物列表、keychain 体检等。
+当前两个入口：
+  - 新建 seal：拉起 SealWizard
+  - 管理 runner：打开 RunnerListWindow（含右键删除/修改模板）
+
+早期版本的独立 “rotate” 按钮已移除：rotate 的自然入口是
+管理窗里右键“修改模板…”（按用户决策）。
 """
 from __future__ import annotations
 
@@ -45,10 +50,6 @@ class MainWindow(QMainWindow):
         self.btn_seal.setMinimumHeight(40)
         self.btn_seal.clicked.connect(self._open_seal_wizard)
 
-        self.btn_rotate = QPushButton("rotate（待实现）")
-        self.btn_rotate.setMinimumHeight(40)
-        self.btn_rotate.setEnabled(False)
-
         self.btn_manage = QPushButton("管理 runner…")
         self.btn_manage.setMinimumHeight(40)
         self.btn_manage.clicked.connect(self._open_runner_list)
@@ -56,7 +57,6 @@ class MainWindow(QMainWindow):
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
         btn_row.addWidget(self.btn_seal)
-        btn_row.addWidget(self.btn_rotate)
         btn_row.addWidget(self.btn_manage)
         btn_row.addStretch(1)
 
