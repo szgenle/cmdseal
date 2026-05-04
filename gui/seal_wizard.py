@@ -90,8 +90,8 @@ class CommandPage(QWizardPage):
 
         self.edit = QPlainTextEdit()
         self.edit.setPlaceholderText(
-            "例如：/usr/local/bin/zhmm_cmd -i /data.gl "
-            "--pwd {{secret:master}} --search {{arg:1}}"
+            "例如：zhmm-cli -i /data.zmb --account you@example.com "
+            "--pwd {{secret:master}} -s {{arg:1}}"
         )
         self.edit.setTabChangesFocus(True)
         mono = QFont("Menlo")

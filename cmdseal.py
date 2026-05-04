@@ -31,8 +31,8 @@ Placeholders inside --command:
 Example:
 
   cmdseal seal \\
-      --command 'zhmm_cmd -i /Users/ws/data.gl \\
-                 --pwd {{secret:master}} --search {{arg:1}}' \\
+      --command 'zhmm-cli -i /Users/ws/data.zmb --account you@example.com \\
+                 --pwd {{secret:master}} -s {{arg:1}}' \\
       --output  ./fetch_pwd
 
 The resulting ./fetch_pwd prompts for 'master' once at generation,

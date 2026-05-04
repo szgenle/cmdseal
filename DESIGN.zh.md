@@ -157,16 +157,16 @@ code requirement**，而不仅仅是它的路径。ad-hoc 签名把身份钉死�
 示例：
 
 ```
-zhmm_cmd -i /Users/ws/data.gl \
+zhmm-cli -i /Users/ws/data.zmb \
+  --account you@example.com \
   --pwd {{secret:master}} \
-  --search {{arg:1}} \
-  --out {{arg:2}}
+  -s {{arg:1}}
 ```
 
 会生成一个可按如下方式调用的二进制：
 
 ```
-./zhmm_fetch "某关键词" /tmp/result.zip
+./zhmm_fetch "某关键词"
 ```
 
 ---

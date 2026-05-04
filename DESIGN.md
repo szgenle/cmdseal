@@ -162,16 +162,16 @@ A command template is a single shell-like string, tokenized by `shlex`:
 Example:
 
 ```
-zhmm_cmd -i /Users/ws/data.gl \
+zhmm-cli -i /Users/ws/data.zmb \
+  --account you@example.com \
   --pwd {{secret:master}} \
-  --search {{arg:1}} \
-  --out {{arg:2}}
+  -s {{arg:1}}
 ```
 
 Generates a binary invoked as:
 
 ```
-./zhmm_fetch "some keyword" /tmp/result.zip
+./zhmm_fetch "some keyword"
 ```
 
 ---
