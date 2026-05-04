@@ -3,7 +3,7 @@
 > *面向 AI 智能体时代的能力网关。*
 > *让你的 AI 智能体**能调用**敏感命令，却**拿不到**背后的秘密。*
 
-[English version](./README.md) · [DESIGN.md](./DESIGN.md)
+[English version](./README.md) · [DESIGN.md](./DESIGN.md) · [使用指南](./USER_GUIDE.zh.md)
 
 `cmdseal` 将命令模板和秘密值转换为一个独立的 macOS 二进制文件。该二进制文件可以执行它被封存时的确切命令——并且**只能**执行那个命令——即使对运行它的用户也不会泄露秘密。
 

@@ -3,7 +3,7 @@
 > *Capability gateways for the AI agent era.*
 > *Give your AI agent the ability to call sensitive commands without giving it the secrets.*
 
-[中文版](./README.zh.md) · [DESIGN.md](./DESIGN.md)
+[中文版](./README.zh.md) · [DESIGN.md](./DESIGN.md) · [USER GUIDE](./USER_GUIDE.md)
 
 `cmdseal` turns a command template plus secret values into a standalone
 macOS binary. The binary can execute the exact command it was sealed
