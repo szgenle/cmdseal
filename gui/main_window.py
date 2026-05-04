@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .runner_list import RunnerListWindow
 from .seal_wizard import SealWizard
 
 
@@ -24,6 +25,7 @@ class MainWindow(QMainWindow):
         self.resize(520, 320)
 
         self._wizard: SealWizard | None = None
+        self._runner_list: RunnerListWindow | None = None
 
         title = QLabel("cmdseal")
         title.setAlignment(Qt.AlignCenter)
@@ -47,10 +49,15 @@ class MainWindow(QMainWindow):
         self.btn_rotate.setMinimumHeight(40)
         self.btn_rotate.setEnabled(False)
 
+        self.btn_manage = QPushButton("管理 runner…")
+        self.btn_manage.setMinimumHeight(40)
+        self.btn_manage.clicked.connect(self._open_runner_list)
+
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
         btn_row.addWidget(self.btn_seal)
         btn_row.addWidget(self.btn_rotate)
+        btn_row.addWidget(self.btn_manage)
         btn_row.addStretch(1)
 
         central = QWidget(self)
@@ -70,4 +77,22 @@ class MainWindow(QMainWindow):
         self._wizard.show()
 
     def _on_wizard_finished(self, _result: int) -> None:
+        # seal 成功后如果 runner 管理窗开着，顺手刷一下
+        # （即使向导取消也无所谓，刷新本身零弹窗）
+        if self._runner_list is not None and self._runner_list.isVisible():
+            self._runner_list.refresh()
         self._wizard = None
+
+    def _open_runner_list(self) -> None:
+        # 已打开则唤到前面，不重复开
+        if self._runner_list is not None and self._runner_list.isVisible():
+            self._runner_list.raise_()
+            self._runner_list.activateWindow()
+            self._runner_list.refresh()
+            return
+        self._runner_list = RunnerListWindow(self)
+        self._runner_list.destroyed.connect(self._on_runner_list_destroyed)
+        self._runner_list.show()
+
+    def _on_runner_list_destroyed(self, *_args) -> None:
+        self._runner_list = None

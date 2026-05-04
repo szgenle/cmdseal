@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -112,3 +113,27 @@ def run_seal_blocking(req: SealRequest) -> subprocess.CompletedProcess[str]:
         cwd=str(PROJECT_ROOT),
         env=os.environ.copy(),
     )
+
+
+def list_sealed(prefix: str = "cmdseal.") -> list[dict]:
+    """枚举已 seal 的 runner（零钥匙串弹窗，见 NEXT.md §5.19 实证）。
+
+    返回 `cmdseal.py list --json` 的解析结果。每个 item 的字段可能有：
+    service / account / label / comment / created / modified / _meta（
+    Plan D comment JSON 解出的 dict，或 None 表示 legacy）。
+
+    失败时抛 CalledProcessError；UI 层自行捕获展示。
+    """
+    if not CMDSEAL_PY.is_file():
+        raise FileNotFoundError(f"cmdseal.py not found at {CMDSEAL_PY}")
+    res = subprocess.run(
+        [PYTHON_EXE, str(CMDSEAL_PY), "list", "--prefix", prefix, "--json"],
+        capture_output=True,
+        text=True,
+        cwd=str(PROJECT_ROOT),
+        env=os.environ.copy(),
+    )
+    if res.returncode != 0:
+        raise subprocess.CalledProcessError(
+            res.returncode, res.args, res.stdout, res.stderr)
+    return json.loads(res.stdout or "[]")
