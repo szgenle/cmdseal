@@ -43,7 +43,9 @@ macOS only. Requires: cc, codesign, /usr/bin/security.
 """
 
 import argparse
+import datetime
 import getpass
+import json
 import os
 import re
 import secrets
@@ -241,10 +243,13 @@ def aead_encrypt(plaintext_bytes, key_hex):
     return nonce, ct, tag
 
 
-def kc_add_key(service, account, key_hex, binary_path):
+def kc_add_key(service, account, key_hex, binary_path, comment_json=None):
     ensure_helper_built()
+    argv = [str(HELPER_BIN), "add", service, account, binary_path]
+    if comment_json:
+        argv.append(comment_json)
     res = subprocess.run(
-        [str(HELPER_BIN), "add", service, account, binary_path],
+        argv,
         input=key_hex,
         text=True,
         capture_output=True,
@@ -255,6 +260,31 @@ def kc_add_key(service, account, key_hex, binary_path):
             f"cmdseal: cmdseal_helper add failed (rc={res.returncode}) "
             f"for service={service}"
         )
+
+
+def kc_list(service_prefix="cmdseal."):
+    """Return a list of dicts describing every keychain item whose
+    service starts with `service_prefix`. Zero ACL prompts (see
+    NEXT.md §5.19 empirical validation).
+
+    Each dict may contain: service, account, label, comment
+    (raw string), created, modified (epoch seconds, float). Missing
+    fields are simply absent.
+    """
+    ensure_helper_built()
+    res = subprocess.run(
+        [str(HELPER_BIN), "list", service_prefix],
+        capture_output=True, text=True,
+    )
+    if res.returncode != 0:
+        sys.stderr.write(res.stderr)
+        sys.exit(
+            f"cmdseal: cmdseal_helper list failed (rc={res.returncode})"
+        )
+    try:
+        return json.loads(res.stdout or "[]")
+    except json.JSONDecodeError as e:
+        sys.exit(f"cmdseal: helper list produced invalid JSON: {e}")
 
 
 def kc_delete(service, account):
@@ -524,12 +554,36 @@ def do_seal(args, *, old_service_to_delete=None):
         kc_step_label = "[3/4] writing keychain item"
 
     # 6. Store K in keychain, bound to the new binary's cdhash.
+    #    Along with K we write a small JSON blob into kSecAttrComment
+    #    describing this runner (label, original template, output path,
+    #    arg arity, secret names, creation timestamp). This blob is
+    #    readable by any same-user process without firing the ACL
+    #    dialog (NEXT.md §5.19) — the GUI uses it to enumerate
+    #    sealed runners with zero popups. It does NOT contain K, the
+    #    secret values, or any AEAD material.
+    positional_args = sorted({int(payload) for kind, payload in tokens
+                              if kind == "arg"})
+    arity = max(positional_args) if positional_args else 0
+    comment_payload = {
+        "v": 1,
+        "label": label,
+        "template": args.command,
+        "output_path": str(output_path),
+        "arity": arity,
+        "secret_names": secret_names,
+        "created_at": datetime.datetime.now(
+            datetime.timezone.utc).isoformat(timespec="seconds"),
+    }
+    comment_json = json.dumps(comment_payload,
+                              ensure_ascii=False, separators=(",", ":"))
+
     print(kc_step_label)
     kc_add_key(
         service=kc_service,
         account=args.user,
         key_hex=key_hex,
         binary_path=str(output_path),
+        comment_json=comment_json,
     )
 
     # 7. Cleanup.
@@ -540,8 +594,6 @@ def do_seal(args, *, old_service_to_delete=None):
         print("[4/4] cleaned up build dir")
 
     # 8. Summary.
-    positional_args = sorted({int(payload) for kind, payload in tokens
-                              if kind == "arg"})
     usage_hint = str(output_path)
     for n in positional_args:
         usage_hint += f" <arg{n}>"
@@ -574,6 +626,61 @@ def do_rotate(args):
     else:
         print(f"[*] old keychain service : {old_service}")
     return do_seal(args, old_service_to_delete=old_service)
+
+
+def do_list(args):
+    """Enumerate sealed runners. Zero ACL prompts.
+
+    Default: human-readable table.
+    --json: emit raw JSON array (one object per item) for GUI / scripting.
+    """
+    check_platform_and_tools()
+    items = kc_list(args.prefix)
+
+    # Parse each item's comment into a nested dict when possible.
+    for it in items:
+        raw = it.get("comment")
+        if raw:
+            try:
+                it["_meta"] = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                it["_meta"] = None
+        else:
+            it["_meta"] = None
+
+    if args.json:
+        print(json.dumps(items, ensure_ascii=False, indent=2))
+        return 0
+
+    if not items:
+        print(f"(no sealed runners found with prefix {args.prefix!r})")
+        return 0
+
+    print(f"{len(items)} sealed runner(s):\n")
+    for it in items:
+        svc = it.get("service", "?")
+        meta = it.get("_meta")
+        if meta:
+            label = meta.get("label", "")
+            out   = meta.get("output_path", "")
+            tmpl  = meta.get("template", "")
+            arity = meta.get("arity", 0)
+            secs  = meta.get("secret_names") or []
+            created = meta.get("created_at", "")
+            print(f"  • {label}")
+            print(f"      service : {svc}")
+            print(f"      output  : {out}")
+            print(f"      template: {tmpl}")
+            print(f"      arity   : {arity} positional arg(s)")
+            print(f"      secrets : {', '.join(secs) if secs else '(none)'}")
+            print(f"      created : {created}")
+        else:
+            # Legacy item: sealed before kSecAttrComment was written.
+            print(f"  • (legacy, metadata unknown)")
+            print(f"      service : {svc}")
+            print(f"      account : {it.get('account', '?')}")
+        print()
+    return 0
 
 
 # ----------------------------------------------------------------------
@@ -624,9 +731,17 @@ def parse_args():
                              "keychain item (overwrites --output)")
     add_common_seal_args(pr)
 
+    pl = sub.add_parser("list",
+                        help="list sealed runners (read-only, zero popups)")
+    pl.add_argument("--prefix", default="cmdseal.",
+                    help="service prefix to match (default: cmdseal.)")
+    pl.add_argument("--json", action="store_true",
+                    help="emit machine-readable JSON instead of a table")
+
     # Back-compat: if the user passes --command/--output at the top
     # level with no subcommand, treat as `seal`.
-    if len(sys.argv) >= 2 and sys.argv[1] not in ("seal", "rotate", "-h", "--help"):
+    if len(sys.argv) >= 2 and sys.argv[1] not in (
+            "seal", "rotate", "list", "-h", "--help"):
         # Inject default subcommand.
         args = p.parse_args(["seal"] + sys.argv[1:])
     else:
@@ -643,6 +758,8 @@ def main():
         return do_seal(args)
     elif args.subcommand == "rotate":
         return do_rotate(args)
+    elif args.subcommand == "list":
+        return do_list(args)
     else:
         sys.exit(f"cmdseal: unknown subcommand {args.subcommand!r}")
 

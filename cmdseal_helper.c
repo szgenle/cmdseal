@@ -24,9 +24,13 @@
  *   evaluated and abandoned; see NEXT.md §5.11 for the post-mortem.
  *
  * Usage:
- *   cmdseal_helper add    <service> <account> <trusted_bin_path>
+ *   cmdseal_helper add    <service> <account> <trusted_bin_path> [comment_json]
  *       (password is read from stdin; never passed via argv to avoid
  *        leakage through /proc-style process listings)
+ *       (optional [comment_json] is stored in the item's
+ *        kSecAttrComment — a small JSON blob of runner metadata,
+ *        readable by any same-user process WITHOUT triggering the
+ *        ACL dialog. Validated empirically in NEXT.md §5.19.)
  *
  *   cmdseal_helper delete <service> <account>
  *       (used by cmdseal rotate to destroy the old K after a
@@ -35,6 +39,13 @@
  *   cmdseal_helper update <service> <account>
  *       (probe-only: reads NEW password from stdin and calls
  *        SecKeychainItemModifyContent; used by modify_acl_probe.py.)
+ *
+ *   cmdseal_helper list <service_prefix>
+ *       Enumerate same-user generic-password items whose service
+ *       starts with <service_prefix> (typically "cmdseal."). Emits
+ *       a JSON array on stdout; one object per item with fields
+ *       service, account, label, comment, created, modified.
+ *       Does NOT read the password data, so no ACL prompts fire.
  *
  *   cmdseal_helper encrypt <key_hex>
  *       AES-256-GCM one-shot encrypt. Reads plaintext from stdin
@@ -55,6 +66,7 @@
  *   71  SecKeychainItemModifyContent failed
  *   72  bad key hex (wrong length or non-hex chars)
  *   73  CCCryptorGCMOneshotEncrypt failed
+ *   75  SecItemCopyMatching failed (list)
  *
  * Compile:
  *   cc -O2 -Wno-deprecated-declarations -o cmdseal_helper \
@@ -101,7 +113,8 @@ static void report(const char *op, OSStatus st) {
 }
 
 static int cmd_add(const char *svc, const char *acct,
-                   const char *pw,  const char *trusted_path) {
+                   const char *pw,  const char *trusted_path,
+                   const char *comment /* may be NULL */) {
     OSStatus st;
 
     /* Delete any pre-existing entry in the default keychain so we
@@ -141,12 +154,23 @@ static int cmd_add(const char *svc, const char *acct,
         return 66;
     }
 
-    /* Create the generic-password item with our strict ACL. */
-    SecKeychainAttribute attrs[] = {
-        { kSecServiceItemAttr, (UInt32)strlen(svc),  (char *)svc  },
-        { kSecAccountItemAttr, (UInt32)strlen(acct), (char *)acct },
-    };
-    SecKeychainAttributeList attrList = { 2, attrs };
+    /* Create the generic-password item with our strict ACL.
+     * If a comment was provided, include it in the same
+     * attribute list so the initial create call writes it atomically
+     * (kSecCommentItemAttr is legacy SecKeychain's FourCC 'icmt',
+     * same physical slot as modern kSecAttrComment). */
+    SecKeychainAttribute attrs[3];
+    UInt32 nattrs = 0;
+    attrs[nattrs++] = (SecKeychainAttribute){
+        kSecServiceItemAttr, (UInt32)strlen(svc),  (char *)svc };
+    attrs[nattrs++] = (SecKeychainAttribute){
+        kSecAccountItemAttr, (UInt32)strlen(acct), (char *)acct };
+    if (comment && comment[0]) {
+        attrs[nattrs++] = (SecKeychainAttribute){
+            kSecCommentItemAttr,
+            (UInt32)strlen(comment), (char *)comment };
+    }
+    SecKeychainAttributeList attrList = { nattrs, attrs };
 
     SecKeychainItemRef item = NULL;
     st = SecKeychainItemCreateFromContent(
@@ -277,6 +301,135 @@ static int hex_decode(const char *hex, size_t hexlen,
     return 0;
 }
 
+/* ---------- list: enumerate cmdseal.* items, emit JSON ---------- */
+
+/* Escape a UTF-8 string as a JSON-quoted string token (inc. the
+ * surrounding quotes). Output on stdout. Handles ", \, control
+ * chars. Non-ASCII bytes are passed through verbatim (valid UTF-8
+ * is valid inside a JSON string). */
+static void json_emit_string(const char *s, size_t n) {
+    putchar('"');
+    for (size_t i = 0; i < n; i++) {
+        unsigned char c = (unsigned char)s[i];
+        switch (c) {
+            case '\"': fputs("\\\"", stdout); break;
+            case '\\': fputs("\\\\", stdout); break;
+            case '\b': fputs("\\b",  stdout); break;
+            case '\f': fputs("\\f",  stdout); break;
+            case '\n': fputs("\\n",  stdout); break;
+            case '\r': fputs("\\r",  stdout); break;
+            case '\t': fputs("\\t",  stdout); break;
+            default:
+                if (c < 0x20) printf("\\u%04x", c);
+                else          putchar(c);
+        }
+    }
+    putchar('"');
+}
+
+/* Pull a CFString out of the result dict under `key`, convert to
+ * UTF-8 in a heap buffer (caller frees). On miss/error *out is NULL
+ * and *outlen is 0. */
+static void copy_cfstr_utf8(CFDictionaryRef d, CFStringRef key,
+                            char **out, size_t *outlen) {
+    *out = NULL; *outlen = 0;
+    CFStringRef s = (CFStringRef)CFDictionaryGetValue(d, key);
+    if (!s || CFGetTypeID(s) != CFStringGetTypeID()) return;
+    CFIndex n = CFStringGetLength(s);
+    CFIndex cap = CFStringGetMaximumSizeForEncoding(n, kCFStringEncodingUTF8) + 1;
+    char *buf = (char *)malloc(cap);
+    if (!buf) return;
+    CFIndex used = 0;
+    CFStringGetBytes(s, CFRangeMake(0, n), kCFStringEncodingUTF8,
+                     0, false, (UInt8 *)buf, cap - 1, &used);
+    buf[used] = '\0';
+    *out = buf;
+    *outlen = (size_t)used;
+}
+
+/* CFDate -> epoch seconds (double). Returns -1 on miss/type error. */
+static double copy_cfdate_epoch(CFDictionaryRef d, CFStringRef key) {
+    CFDateRef dt = (CFDateRef)CFDictionaryGetValue(d, key);
+    if (!dt || CFGetTypeID(dt) != CFDateGetTypeID()) return -1.0;
+    return (double)CFDateGetAbsoluteTime(dt) + kCFAbsoluteTimeIntervalSince1970;
+}
+
+static int cmd_list(const char *prefix) {
+    CFMutableDictionaryRef q = CFDictionaryCreateMutable(
+        NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(q, kSecClass, kSecClassGenericPassword);
+    CFDictionarySetValue(q, kSecMatchLimit, kSecMatchLimitAll);
+    CFDictionarySetValue(q, kSecReturnAttributes, kCFBooleanTrue);
+    CFDictionarySetValue(q, kSecReturnData, kCFBooleanFalse);
+
+    CFTypeRef result = NULL;
+    OSStatus st = SecItemCopyMatching(q, &result);
+    CFRelease(q);
+
+    if (st == errSecItemNotFound) {
+        printf("[]\n");
+        return 0;
+    }
+    if (st != errSecSuccess) {
+        report("SecItemCopyMatching", st);
+        return 75;
+    }
+
+    CFArrayRef arr = (CFArrayRef)result;
+    CFIndex n = CFArrayGetCount(arr);
+    size_t plen = prefix ? strlen(prefix) : 0;
+
+    printf("[");
+    int first = 1;
+    for (CFIndex i = 0; i < n; i++) {
+        CFDictionaryRef item = (CFDictionaryRef)CFArrayGetValueAtIndex(arr, i);
+
+        char *svc = NULL; size_t svc_len = 0;
+        copy_cfstr_utf8(item, kSecAttrService, &svc, &svc_len);
+        if (!svc) continue;
+        if (plen > 0 && strncmp(svc, prefix, plen) != 0) {
+            free(svc);
+            continue;
+        }
+
+        char *acct = NULL;  size_t acct_len  = 0;
+        char *label = NULL; size_t label_len = 0;
+        char *cmt = NULL;   size_t cmt_len   = 0;
+        copy_cfstr_utf8(item, kSecAttrAccount, &acct,  &acct_len);
+        copy_cfstr_utf8(item, kSecAttrLabel,   &label, &label_len);
+        copy_cfstr_utf8(item, kSecAttrComment, &cmt,   &cmt_len);
+        double created  = copy_cfdate_epoch(item, kSecAttrCreationDate);
+        double modified = copy_cfdate_epoch(item, kSecAttrModificationDate);
+
+        if (!first) putchar(',');
+        first = 0;
+        fputs("{\"service\":", stdout);
+        json_emit_string(svc, svc_len);
+        if (acct) {
+            fputs(",\"account\":", stdout);
+            json_emit_string(acct, acct_len);
+        }
+        if (label) {
+            fputs(",\"label\":", stdout);
+            json_emit_string(label, label_len);
+        }
+        if (cmt) {
+            fputs(",\"comment\":", stdout);
+            json_emit_string(cmt, cmt_len);
+        }
+        if (created  >= 0) printf(",\"created\":%.3f",  created);
+        if (modified >= 0) printf(",\"modified\":%.3f", modified);
+        putchar('}');
+
+        free(svc); free(acct); free(label); free(cmt);
+    }
+    printf("]\n");
+
+    CFRelease(result);
+    return 0;
+}
+
 static int cmd_encrypt(const char *keyhex) {
     /* 1. Decode key. */
     size_t hl = strlen(keyhex);
@@ -343,13 +496,14 @@ int main(int argc, char *argv[]) {
     if (argc < 2) goto usage;
 
     if (strcmp(argv[1], "add") == 0) {
-        if (argc != 5) goto usage;
+        if (argc != 5 && argc != 6) goto usage;
 
         char *buf = NULL;
         size_t len = 0;
         int r = read_password_stdin(&buf, &len);
         if (r != 0) return r;
-        int rc = cmd_add(argv[2], argv[3], buf, argv[4]);
+        const char *comment = (argc == 6) ? argv[5] : NULL;
+        int rc = cmd_add(argv[2], argv[3], buf, argv[4], comment);
         /* Best-effort scrub. */
         memset(buf, 0, len);
         free(buf);
@@ -373,6 +527,14 @@ int main(int argc, char *argv[]) {
         return rc;
     }
 
+    if (strcmp(argv[1], "list") == 0) {
+        /* usage: list [service_prefix]   (no prefix = enumerate ALL
+         * same-user generic passwords; typical use passes "cmdseal.") */
+        if (argc != 2 && argc != 3) goto usage;
+        const char *prefix = (argc == 3) ? argv[2] : "";
+        return cmd_list(prefix);
+    }
+
     if (strcmp(argv[1], "encrypt") == 0) {
         if (argc != 3) goto usage;
         return cmd_encrypt(argv[2]);
@@ -381,13 +543,15 @@ int main(int argc, char *argv[]) {
 usage:
     fprintf(stderr,
         "usage:\n"
-        "  %s add    <service> <account> <trusted_bin_path>\n"
+        "  %s add    <service> <account> <trusted_bin_path> [comment_json]\n"
         "       (password on stdin)\n"
         "  %s delete <service> <account>\n"
         "  %s update <service> <account>\n"
         "       (new password on stdin)\n"
+        "  %s list   [service_prefix]\n"
+        "       (emits JSON array on stdout; no ACL prompts)\n"
         "  %s encrypt <key_hex>\n"
         "       (plaintext on stdin; emits nonce||ct||tag on stdout)\n",
-        argv[0], argv[0], argv[0], argv[0]);
+        argv[0], argv[0], argv[0], argv[0], argv[0]);
     return 64;
 }
