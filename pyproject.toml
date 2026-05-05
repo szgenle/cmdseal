@@ -1,13 +1,40 @@
 [project]
 name = "cmdseal-gui"
 # 单一版本来源。gui/__init__.py 通过 importlib.metadata 动态读取，避免两处漂移。
+# 注：此处是 cmdseal-gui（PySide6 前端包）的版本，与项目整体（README/DESIGN 中
+# 的 v1.x 口径）是两条独立版本线，不需要对齐。
 version = "0.2.0"
-description = "PySide6 GUI frontend for cmdseal"
+description = "PySide6 GUI frontend for cmdseal — seal shell commands into tamper-evident macOS binaries"
+readme = "README.md"
 requires-python = ">=3.13,<3.14"
+license = { text = "MIT" }
+authors = [
+    { name = "szgenle", email = "szgenle@szgenle.com" },
+]
+keywords = ["macos", "security", "keychain", "shell", "cli", "gui", "pyside6"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: MacOS X",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: User Interfaces",
+    "Topic :: System :: Shells",
+]
 # 运行时依赖（PEP 621 标准字段，uv 原生识别）
 dependencies = [
     "PySide6>=6.8,<6.10",
 ]
+
+[project.urls]
+Homepage = "https://github.com/szgenle/cmdseal"
+Repository = "https://github.com/szgenle/cmdseal"
+Issues = "https://github.com/szgenle/cmdseal/issues"
+Changelog = "https://github.com/szgenle/cmdseal/blob/main/CHANGELOG.md"
 
 # 按 PEP 735 的 dependency-groups 管理"非运行时"依赖。
 # 日常开发：`uv sync`（只装 dependencies）
