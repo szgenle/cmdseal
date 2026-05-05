@@ -10,7 +10,7 @@ on the `cmdseal` (CLI + runner) surface. The `cmdseal-gui` PySide6
 front-end package in [`pyproject.toml`](./pyproject.toml) carries its
 own independent version number and is not required to stay in lock-step.
 
-## [1.2.1] - Unreleased
+## [1.2.1] - 2026-05-05
 
 GUI companion release for v1.2. Brings the multi-segment pipe
 capability from the CLI to **both** PySide6 wizards so users can
@@ -142,7 +142,7 @@ compose pipelines visually.
   over the new `build_template_many([tokens], [selected])`; the
   existing unit-test suite passes unchanged.
 
-## [1.2.0] - Unreleased
+## [1.2.0] - 2026-05-05
 
 Pipe-support release. Adds multi-segment pipelines to sealed binaries
 while preserving the v1.1 security model (no shell at runtime, absolute
@@ -192,7 +192,7 @@ paths, `DYLD_*` stripped, hardened runtime). Design: [research/DESIGN.pipe.md](.
 - GUI support for composing multi-segment templates is deferred to
   v1.2.1 and tracked separately.
 
-## [1.1.0] - Unreleased
+## [1.1.0] - 2026-05-04
 
 First public open-source release. Version 1.1 is a security-hardening
 milestone on top of the 1.0 baseline that was developed in private.
