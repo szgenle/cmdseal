@@ -1,0 +1,99 @@
+# Changelog
+
+> 中文版：[CHANGELOG.zh.md](./CHANGELOG.zh.md)
+
+All notable changes to `cmdseal` are documented here.
+
+The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+on the `cmdseal` (CLI + runner) surface. The `cmdseal-gui` PySide6
+front-end package in [`pyproject.toml`](./pyproject.toml) carries its
+own independent version number and is not required to stay in lock-step.
+
+## [1.1.0] - Unreleased
+
+First public open-source release. Version 1.1 is a security-hardening
+milestone on top of the 1.0 baseline that was developed in private.
+
+### Added
+
+- **Runtime program-path binding.** `cmdseal seal` resolves bare
+  program names (e.g. `zip`) to an absolute path via `shutil.which`
+  at seal time and bakes the result into the AEAD ciphertext. The
+  runner then refuses any `$PATH` lookup.
+- **`cmdseal rotate`** subcommand: generates a fresh AES-256 key,
+  rewrites the AEAD ciphertext, re-signs the sealed binary and swaps
+  the keychain item atomically. Non-interactive, ~1 s per runner.
+- **Runner management** in the GUI: list all sealed runners with
+  their keychain items, delete them (keychain entry + on-disk file
+  kept in sync).
+- **Template wizard** ("build a template from a working command")
+  in the GUI, plus path-aware argument visualisation.
+- **Bilingual documentation**: `README.md` / `README.zh.md`,
+  `DESIGN.md` / `DESIGN.zh.md`, `USER_GUIDE.md` /
+  `USER_GUIDE.zh.md`.
+- **`tests/`** directory with headless GUI tests
+  (`QT_QPA_PLATFORM=offscreen`) and `test_v11_e2e.sh` end-to-end
+  security validation script (7 indicators).
+- **Third-party license disclosure**: `THIRD_PARTY_LICENSES.md` for
+  PySide6 / Qt LGPL compliance.
+- **MIT License** file (`LICENSE`).
+
+### Security
+
+- **#2 `execvp` → `execv`.** The generated runner no longer performs
+  any runtime `PATH` resolution; the underlying program path is the
+  absolute path resolved and baked in at seal time. Prevents
+  `PATH`-based program substitution.
+- **#3 `DYLD_*` / `LD_*` environment stripping.** `strip_dangerous_env`
+  is called before `execv`, so neither the sealed binary's child
+  process nor any `cmdseal`-spawned subprocess inherits dylib-
+  injection variables.
+- **#4 Hardened runtime.** Both the sealed runner and `cmdseal_helper`
+  are signed with `codesign --options runtime` (ad-hoc identity),
+  which instructs `dyld` itself to ignore `DYLD_*` variables for
+  this binary even if they are somehow re-introduced.
+- **Plan D AEAD.** The secret is embedded as AES-GCM ciphertext
+  inside the binary; it only exists in plaintext inside the runner's
+  address space for the brief window between keychain fetch and
+  `execv`.
+- **Keychain ACL binding.** The partition-list / ACL of the stored
+  key is bound to the sealed binary's cdhash. Bitwise-identical
+  copies, ad-hoc signed probes, and direct `security` calls have
+  all been verified to be rejected.
+
+### Changed
+
+- GUI seal wizard simplified (fewer steps, clearer argument
+  visualisation); README repositioned around "developer source-code
+  build" as the primary distribution model.
+- Repository home moved to <https://github.com/szgenle/cmdseal>
+  (previous internal mirror retired).
+
+### Documentation
+
+- README rewritten (EN + zh) with an explicit `Security model`
+  section covering what cmdseal does and does **not** protect
+  against.
+- `SECURITY.md` added with the vulnerability-reporting channel and
+  response SLA.
+
+### Known limitations
+
+- Distribution is source-only. No Developer-ID-signed notarized
+  `.app` is published yet; that is gated on the maintainer joining
+  the Apple Developer Program (tracked via GitHub Issues).
+- macOS only. Linux / Windows are explicitly out of scope because
+  the security model depends on macOS keychain ACL + cdhash binding.
+
+## [1.0.0] - Pre-release baseline (never tagged publicly)
+
+Initial private baseline — included here for historical context only.
+
+- AEAD-sealed runner generation (`cmdseal seal`).
+- Keychain-stored AES-256 key with cdhash-bound ACL.
+- Ad-hoc codesigning of the generated runner.
+- First-cut PySide6 GUI with a seal wizard.
+- PyInstaller `.app` packaging pipeline.
+
+[1.1.0]: https://github.com/szgenle/cmdseal/releases/tag/v1.1.0
