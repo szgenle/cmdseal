@@ -27,6 +27,9 @@
   keychain item，支持删除（keychain 条目与磁盘文件会同步清理）。
 - **模板向导**（「从一条能跑的命令构建模板」）以及带路径识别
   的参数可视化。
+- **偏好设置面板**（`⌘,`），基于 `QSettings` 持久化默认输出
+  目录、文件名前缀和 dry-run 超时；模板向导在初始化时
+  读取这些默认值。
 - **双语文档**：`README.md` / `README.zh.md`、
   `DESIGN.md` / `DESIGN.zh.md`、
   `USER_GUIDE.md` / `USER_GUIDE.zh.md`。

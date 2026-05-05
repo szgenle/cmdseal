@@ -29,6 +29,9 @@ milestone on top of the 1.0 baseline that was developed in private.
   kept in sync).
 - **Template wizard** ("build a template from a working command")
   in the GUI, plus path-aware argument visualisation.
+- **Preferences panel** (`⌘,`) in the GUI, backed by `QSettings`,
+  persisting default output directory, filename prefix and dry-run
+  timeout; the template wizard reads these defaults at init time.
 - **Bilingual documentation**: `README.md` / `README.zh.md`,
   `DESIGN.md` / `DESIGN.zh.md`, `USER_GUIDE.md` /
   `USER_GUIDE.zh.md`.
