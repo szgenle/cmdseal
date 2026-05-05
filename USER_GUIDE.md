@@ -622,7 +622,7 @@ my-command {{arg:1}} {{arg:2}}
 security find-generic-password -s cmdseal.<hash>.K
 
 # Sample output
-keychain: "/Users/ws/Library/Keychains/login.keychain-db"
+keychain: "/Users/<you>/Library/Keychains/login.keychain-db"
 version: 512
 class: "genp"
 attributes:

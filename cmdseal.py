@@ -34,7 +34,7 @@ Placeholders inside --command:
 Example:
 
   cmdseal seal \\
-      --command 'zhmm-cli -i /Users/ws/data.zmb --account you@example.com \\
+      --command 'zhmm-cli -i ~/data.zmb --account you@example.com \\
                  --pwd {{secret:master}} -s {{arg:1}}' \\
       --output  ./fetch_pwd
 

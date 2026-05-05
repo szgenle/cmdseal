@@ -183,7 +183,7 @@ sealed 二进制可以包含 **1..N 段**（硬上限 8 段）由 stdout→stdin
 示例：
 
 ```
-zhmm-cli -i /Users/ws/data.zmb \
+zhmm-cli -i ~/data.zmb \
   --account you@example.com \
   --pwd {{secret:master}} \
   -s {{arg:1}}

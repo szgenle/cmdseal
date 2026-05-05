@@ -193,7 +193,7 @@ A command template is a single shell-like string, tokenized by `shlex`:
 Example:
 
 ```
-zhmm-cli -i /Users/ws/data.zmb \
+zhmm-cli -i ~/data.zmb \
   --account you@example.com \
   --pwd {{secret:master}} \
   -s {{arg:1}}
