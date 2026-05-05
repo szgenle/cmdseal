@@ -40,6 +40,12 @@ ever seeing the master password.
 
 ## Quick start (GUI)
 
+<p align="center">
+  <img src="docs/assets/screenshots/EnterCommand-en.webp" alt="cmdseal GUI — Generate from Command wizard" width="720">
+  <br>
+  <em>Generate from Command wizard — turn a working command into a sealable template.</em>
+</p>
+
 If you prefer clicking:
 
 ```bash

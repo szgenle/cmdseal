@@ -35,6 +35,12 @@
 
 ## 快速上手（GUI）
 
+<p align="center">
+  <img src="docs/assets/screenshots/EnterCommand-zh.webp" alt="cmdseal GUI — 从命令生成模板向导" width="720">
+  <br>
+  <em>「从命令生成模板」向导 — 把一条能跑的命令一键改写成可封存的模板。</em>
+</p>
+
 如果你喜欢图形界面：
 
 ```bash
