@@ -1,6 +1,7 @@
 [project]
 name = "cmdseal-gui"
-version = "0.0.1"
+# 单一版本来源。gui/__init__.py 通过 importlib.metadata 动态读取，避免两处漂移。
+version = "0.2.0"
 description = "PySide6 GUI frontend for cmdseal"
 requires-python = ">=3.13,<3.14"
 # 运行时依赖（PEP 621 标准字段，uv 原生识别）
