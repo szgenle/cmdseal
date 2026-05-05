@@ -255,6 +255,17 @@ it is gated on the maintainer joining the Apple Developer Program.
 [MIT](./LICENSE) — do what you want, attribution appreciated, no
 warranty.
 
+## Third-party
+
+`cmdseal` uses [**PySide6**](https://pypi.org/project/PySide6/) and
+[**Qt 6**](https://www.qt.io/), both under the
+[LGPL-3.0](https://www.gnu.org/licenses/lgpl-3.0.txt) license.
+Qt is a trademark of The Qt Company Ltd.; `cmdseal` is not affiliated
+with or endorsed by The Qt Company.
+
+See [`THIRD_PARTY_LICENSES.md`](./THIRD_PARTY_LICENSES.md) for the
+full list of third-party components and our LGPL compliance notes.
+
 ## Related
 
 - [DESIGN.md](./DESIGN.md) — architecture and design decisions

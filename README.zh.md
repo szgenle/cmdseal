@@ -238,6 +238,17 @@ strings ./seal_zip | grep cmdseal
 
 [MIT](./LICENSE) — 做你想做的，署名 appreciated，无保修。
 
+## 第三方组件
+
+`cmdseal` 使用了 [**PySide6**](https://pypi.org/project/PySide6/) 和
+[**Qt 6**](https://www.qt.io/)，两者均采用
+[LGPL-3.0](https://www.gnu.org/licenses/lgpl-3.0.txt) 许可证。
+Qt 是 The Qt Company Ltd. 的商标；`cmdseal` 与 The Qt Company
+无附属关系，也未获其背书。
+
+完整的第三方组件清单和 LGPL 合规说明见
+[`THIRD_PARTY_LICENSES.md`](./THIRD_PARTY_LICENSES.md)。
+
 ## 相关
 
 - [DESIGN.md](./DESIGN.md) — 架构和设计决策
