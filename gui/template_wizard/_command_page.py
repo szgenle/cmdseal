@@ -260,6 +260,8 @@ class CommandInputPage(QWizardPage):
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setWidget(self._segments_host)
+        # 段编辑区是主要交互面，给一个足够的最小高度
+        self._scroll.setMinimumHeight(260)
 
         self.add_seg_btn = QPushButton("➕ 添加管道段")
         self.add_seg_btn.clicked.connect(self._add_segment)
@@ -289,7 +291,7 @@ class CommandInputPage(QWizardPage):
         lay.addLayout(example_row)
         lay.addWidget(self.shell_warn)
         lay.addWidget(QLabel("命令（多段按顺序串联为管道）："))
-        lay.addWidget(self._scroll, 1)
+        lay.addWidget(self._scroll, 3)
         lay.addWidget(self.add_seg_btn, 0, Qt.AlignLeft)
         lay.addWidget(self.summary)
         lay.addLayout(btn_row)

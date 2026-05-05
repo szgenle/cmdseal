@@ -19,7 +19,7 @@ class TemplateWizard(QWizard):
         self.setWizardStyle(QWizard.ModernStyle)
         self.setOption(QWizard.NoBackButtonOnStartPage, True)
         self.setOption(QWizard.IndependentPages, False)
-        self.resize(840, 640)
+        self.resize(840, 840)
 
         # 从偏好面板读当前默认值，快照存入向导实例。
         # 读一次用到底：向导打开期间修改 Preferences 不会热生效（关闭重开生效），
