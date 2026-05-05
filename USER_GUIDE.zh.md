@@ -18,13 +18,11 @@
   - [2.6 从命令生成模板（简化入口）](#26-从命令生成模板简化入口)
 - [3. Runner 管理](#3-runner-管理)
   - [3.1 查看 Runner 列表](#31-查看-runner-列表)
-  - [3.2 修改模板（密钥轮换）](#32-修改模板密钥轮换)
-  - [3.3 删除 Runner](#33-删除-runner)
+  - [3.2 删除 Runner](#32-删除-runner)
 - [4. CLI 命令参考](#4-cli-命令参考)
   - [4.1 seal - 封存命令](#41-seal---封存命令)
   - [4.2 rotate - 轮换密钥](#42-rotate---轮换密钥)
   - [4.3 list - 列出 Runner](#43-list---列出-runner)
-  - [4.4 edit-template - 修改模板](#44-edit-template---修改模板)
 - [5. 占位符语法](#5-占位符语法)
   - [5.1 基本规则](#51-基本规则)
   - [5.2 示例场景](#52-示例场景)
@@ -323,33 +321,7 @@ zhmm-cli --pwd {{secret:master}} --api-key {{secret:apikey}}
 
 ---
 
-### 3.2 修改模板（密钥轮换）
-
-**使用场景**：
-- 想更换密钥但不想重新构建二进制
-- 想修改命令模板
-
-**操作步骤**：
-
-1. 打开 Runner 管理窗
-2. 右键选择目标 runner
-3. 点击 **"修改模板…"**
-4. 输入新的命令模板
-5. 如果有 `{{secret:*}}`，会提示重新输入
-6. 点击 "保存" → 自动完成：
-   - ✅ 重新编译二进制
-   - ✅ 生成新密钥 K
-   - ✅ 删除旧 service
-   - ✅ 轮换 cdhash + ACL
-
-**优势**：
-- 🚀 无需用户交互，约 1 秒完成
-- 🔒 原子性操作，不会出现中间状态
-- ✅ 零授权弹窗（owner 身份操作）
-
----
-
-### 3.3 删除 Runner
+### 3.2 删除 Runner
 
 **操作步骤**：
 
@@ -472,76 +444,6 @@ ZIP 加密           cmdseal.d4e5f6.K                 zip -j -P {{secret:zippw}}
 - **Label** - 标签名
 - **Service** - Keychain service 名称
 - **Template** - 命令模板（位置参数已掩码为 `***`）
-
----
-
-### 4.4 edit-template - 修改模板
-
-**用途**：CLI 方式的模板修改（等同于 GUI 的“修改模板…”）。
-就地重写 sealed binary 的命令模板，同时轮换 keychain 密钥 `K`；
-保留原有的 label、输出路径、secret 名集合不变。
-
-```bash
-python3 cmdseal.py edit-template \
-    --service cmdseal.<12hex>.K \
-    --command 'NEW_COMMAND'
-```
-
-**必填参数**：
-
-| 参数 | 说明 |
-|------|------|
-| `--service` | 要修改的 runner 的 keychain 服务名。可用 `cmdseal.py list` 查出。 |
-| `--command` | 新命令模板。可多次传入组成管道（最多 8 段，语义与 `seal` 一致）。 |
-
-**可选参数**：
-
-| 参数 | 说明 |
-|------|------|
-| `--user` | keychain 账户名（默认：`$USER`；如定位到旧 item，会自动覆盖为旧账户名）。 |
-| `--secrets-from-stdin` | 从 stdin 读 `NAME=VALUE` 行（供脚本 / GUI 前端使用）。 |
-| `--template`、`--no-sign`、`--signing-identity`、`--keep-source` | 含义与 `seal` 完全相同。 |
-
-**约束**：
-
-- 新模板的 `{{secret:NAME}}` 集合**必须与原始集合完全一致**。
-  如需增减 secret，请删除后重新 seal（AEAD 不可逆，旧 secret
-  值无法被重新绑定到不同的名字集合）。
-- Legacy 条目（无 `kSecAttrComment` 元数据的旧版本 runner）会被
-  拒绝，必须先删除再用 `cmdseal seal` 重建。
-
-**执行后效果**：
-
-- 保留的 `output_path` 处的磁盘 binary 被覆写。
-- 新的 `K`（以及新的 keychain 服务名）取代旧的。会与 `rotate`
-  一样，重编译后的 binary 首次运行会弹一次 macOS 混合授权窗
-  （新 cdhash → 新 partition-list）。
-
-**示例** — 最简形式：
-
-```bash
-python3 cmdseal.py edit-template \
-    --service cmdseal.1e742ffc7243.K \
-    --command '/bin/echo world'
-```
-
-**示例** — 带 secret（经 stdin）：
-
-```bash
-printf 'newzippw=s3cret\n' | python3 cmdseal.py edit-template \
-    --service cmdseal.ab12cd34ef56.K \
-    --command 'zip -j -P {{secret:newzippw}} {{arg:1}} {{arg:2}}' \
-    --secrets-from-stdin
-```
-
-**示例** — 改成多段管道 runner：
-
-```bash
-python3 cmdseal.py edit-template \
-    --service cmdseal.ab12cd34ef56.K \
-    --command '/bin/echo hello' \
-    --command '/usr/bin/tr a-z A-Z'
-```
 
 ---
 
@@ -856,7 +758,7 @@ seal_{工具名}_{环境}
 
 | 场景 | 轮换频率 | 方法 |
 |------|----------|------|
-| 生产环境 | 每 90 天 | GUI: 右键 → 修改模板 / CLI: `rotate` |
+| 生产环境 | 每 90 天 | CLI: `rotate`（或 GUI: 删除后重新 seal） |
 | 测试环境 | 每 30 天 | 同上 |
 | 泄露应急 | 立即 | 同上 |
 
@@ -929,9 +831,6 @@ python3 cmdseal.py rotate BINARY
 
 # 列出 runner
 python3 cmdseal.py list [--json]
-
-# 修改模板（详见 §4.4）
-python3 cmdseal.py edit-template --service SERVICE --command CMD
 
 # 构建 GUI
 make app

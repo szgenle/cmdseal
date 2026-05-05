@@ -12,14 +12,13 @@ Pure-Python, no keychain / codesign required. Verifies `serialize_segments`
 byte layout, single-segment byte-compat with v1.1, and `\x03` separator
 insertion for multi-segment pipelines.
 
-### edit-template unit tests (v1.2.1, CI-friendly)
+### mask_template unit tests (v1.2.1, CI-friendly)
 ```bash
-python3 tests/test_edit_template.py
+python3 tests/test_mask_template.py
 ```
-Pure-Python, mocks `kc_list` / `do_seal`. Covers 6 error paths (service not
-found, legacy item, invalid comment JSON, missing `output_path`, secret-set
-mismatch, too many pipe segments) plus the happy path (correct field
-injection + `old_service_to_delete` routing to `do_seal`).
+Pure-Python, no keychain / codesign required. Verifies the template-masking
+rules used by `cmdseal list` and the GUI runner list (Unix-stuck flags,
+absolute paths, placeholders, long/short flags, idempotency).
 
 ### Pipe end-to-end (v1.2, interactive)
 ```bash
@@ -45,9 +44,9 @@ make smoke
 
 - `test_pipe_serialize.py` - v1.2 pipe plaintext-serialization unit tests
   (`serialize_segments`, `tokenize_command`, byte-level v1.1 compatibility).
-- `test_edit_template.py` - v1.2.1 `do_edit_template` error-path + happy-path
-  regression (6 `sys.exit` branches + correct delegation to `do_seal` with
-  `old_service_to_delete`).
+- `test_mask_template.py` - v1.2.1 `mask_template` rule regression
+  (28 cases covering Unix-stuck flags, placeholders, absolute-path masking,
+  long/short flag semantics, quoted tokens, idempotency).
 - `test_v12_pipe_e2e.sh` - v1.2 pipe end-to-end verification (seal + run +
   exit-code matrix). Interactive: requires keychain authorization per case.
 - `test_v11_e2e.sh` - v1.1 end-to-end security validation (hardened runtime,

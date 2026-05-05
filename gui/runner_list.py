@@ -20,13 +20,11 @@ from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QAction, QBrush, QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QMenu,
     QMessageBox,
-    QPlainTextEdit,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -34,7 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .backend import delete_runner, edit_template, list_sealed
+from .backend import delete_runner, list_sealed
 
 
 _COLS = ("Label", "Service", "Template", "Created")
@@ -46,27 +44,27 @@ _PLACEHOLDER_RE = re.compile(
 
 
 def _mask_template(template: str) -> str:
-    """将命令模板里的「裸位置参数」打成 ***，保留 flag / 占位符 / 命令名。
+    """将命令模板按规则打码。
 
-    规则（按用户决策）：
+    规则（与 cmdseal.py::mask_template 权威实现保持一致；
+    新 seal 的 runner comment 里存的已经是打码值，本函数幂等
+    再跑一次以兼容 legacy 或旧版本数据）：
       1. 首个 token（命令名本体）保留
-      2. 以 ``-`` 开头的 token（Unix flag，含长/短选项及 ``--flag=value``）保留
-      3. 以 ``/`` 开头的 token（Windows 风格 flag）保留
-      4. 含 ``{{arg:N}}`` / ``{{secret:NAME}}`` 占位符的 token 保留
-      5. 其余 token 视为位置参数，整体替换成 ``***``
+      2. 含 ``{{arg:N}}`` / ``{{secret:NAME}}`` 占位符的 token 保留
+      3. ``--`` 开头的 GNU 长 flag：
+           * 含 ``=`` → ``--key=***``
+           * 不含 ``=`` → 整体保留
+      4. ``-`` 开头的短 flag：
+           * 长度 == 2（如 ``-p``）保留
+           * 长度 > 2（如 ``-pPass`` / ``-xzvf``）→ 取前两字符 + ``***``
+      5. 其他裸 token（含绝对路径、引号值等）→ ``***``
 
-    例：
-      zip -P {{secret:PW}} -r out.zip {{arg:1}}
-        → zip -P {{secret:PW}} -r *** {{arg:1}}
-
-      docker run -e K={{secret:DB}} nginx:1.27 my-container
-        → docker run -e K={{secret:DB}} *** ***
-
-    shlex 负责处理带引号的 token（如 ``\"hello world\"`` 会被视作单个 token）；
-    解析失败（例如引号不闭合）时降级按空白切分——展示容忍轻微失真，但绝
-    不能把整串原样漏出。
+    shlex 解析失败（引号不闭合等）时降级按空白切分，仍遵守上述
+    规则，不得将原值漏出。
     """
-    s = template or ""
+    if template is None:
+        return ""
+    s = template
     if not s.strip():
         return s
     try:
@@ -76,13 +74,25 @@ def _mask_template(template: str) -> str:
     out: list[str] = []
     for i, tok in enumerate(tokens):
         if i == 0:
-            out.append(tok)                         # 命令名本体
-        elif tok.startswith("-") or tok.startswith("/"):
-            out.append(tok)                         # flag
-        elif _PLACEHOLDER_RE.search(tok):
-            out.append(tok)                         # 占位符
-        else:
-            out.append("***")                       # 裸位置参数
+            out.append(tok)
+            continue
+        if _PLACEHOLDER_RE.search(tok):
+            out.append(tok)
+            continue
+        if tok.startswith("--"):
+            if "=" in tok:
+                key, _ = tok.split("=", 1)
+                out.append(f"{key}=***")
+            else:
+                out.append(tok)
+            continue
+        if tok.startswith("-") and len(tok) >= 2:
+            if len(tok) == 2:
+                out.append(tok)
+            else:
+                out.append(tok[:2] + "***")
+            continue
+        out.append("***")
     return " ".join(out)
 
 
@@ -254,18 +264,6 @@ class RunnerListWindow(QWidget):
 
         menu = QMenu(self._table)
 
-        # “修改模板…”：legacy runner（无元数据）灰掉
-        act_edit = QAction("修改模板…", self._table)
-        if meta is None:
-            act_edit.setEnabled(False)
-            act_edit.setToolTip(
-                "此 runner 没有元数据（legacy），无法修改模板。\n"
-                "请重新通过“新建 seal…”创建。")
-        else:
-            act_edit.triggered.connect(
-                lambda _=False, d=data: self._open_edit_dialog(d))
-        menu.addAction(act_edit)
-
         act_delete = QAction("删除…", self._table)
         act_delete.triggered.connect(
             lambda _=False, d=data: self._confirm_delete(d))
@@ -273,71 +271,7 @@ class RunnerListWindow(QWidget):
 
         menu.exec(self._table.viewport().mapToGlobal(pos))
 
-    # ---- edit template ---------------------------------------------------
-
-    def _open_edit_dialog(self, item: dict[str, Any]) -> None:
-        meta = item.get("_meta") or {}
-        label = str(meta.get("label") or "(legacy)")
-        tmpl_old = str(meta.get("template") or "")
-        out = str(meta.get("output_path") or "")
-        svc = str(item.get("service") or "?")
-        acct = str(item.get("account") or "")
-        secret_names = list(meta.get("secret_names") or [])
-
-        # Round 3 阶段不包含 secret 输入层：模板包含 secret 时
-        # 引导用户走 CLI（AEAD 密文不可逆解旧 secret 值，要重新输入）
-        if secret_names:
-            names = ", ".join(secret_names)
-            example_name = secret_names[0]
-            QMessageBox.information(
-                self, "cmdseal",
-                f"此 runner 含 {len(secret_names)} 个 secret（{names}），\n"
-                "GUI 修改模板暂不支持 secret 重输入，请使用 CLI：\n\n"
-                f'  echo "{example_name}=..." | \\\n'
-                f'    python3 cmdseal.py edit-template \\\n'
-                f'      --service {svc} \\\n'
-                f'      --command "<new-template>" \\\n'
-                "      --secrets-from-stdin\n\n"
-                "或者删除后重新“新建 seal…”。")
-            return
-
-        dlg = _EditTemplateDialog(self, label, tmpl_old, out, svc)
-        if dlg.exec() != QDialog.Accepted:
-            return
-        tmpl_new = dlg.new_template()
-        if not tmpl_new:
-            return
-        if tmpl_new == tmpl_old:
-            # 没改就不折腾重建
-            return
-
-        # 阻塞调用；edit-template 包含 cc + codesign，约 1–3s。
-        # Round 3.5 再改 QProcess + 进度条。这里先用 busy cursor。
-        self.setCursor(Qt.WaitCursor)
-        self._btn_refresh.setEnabled(False)
-        try:
-            edit_template(svc, acct, tmpl_new, secrets=None)
-        except subprocess.CalledProcessError as e:
-            self.unsetCursor()
-            self._btn_refresh.setEnabled(True)
-            QMessageBox.critical(
-                self, "cmdseal",
-                f"修改模板失败（rc={e.returncode}）\n\n"
-                f"{e.stderr or e.stdout or '(no output)'}")
-            return
-        except Exception as e:  # noqa: BLE001
-            self.unsetCursor()
-            self._btn_refresh.setEnabled(True)
-            QMessageBox.critical(self, "cmdseal", f"意外错误：{e}")
-            return
-        self.unsetCursor()
-
-        self.refresh()
-        QMessageBox.information(
-            self, "cmdseal",
-            f"已更新 runner「{label}」的命令模板。\n"
-            f"binary 已覆盖：{out}\n"
-            f"service 已轮换（旧项已删除）。")
+    # ---- delete ----------------------------------------------------------
 
     def _confirm_delete(self, item: dict[str, Any]) -> None:
         svc = str(item.get("service") or "?")
@@ -424,52 +358,3 @@ class RunnerListWindow(QWidget):
                     f"请手动删除该文件（已不能再解密运行）。")
 
         self.refresh()
-
-
-class _EditTemplateDialog(QDialog):
-    """修改命令模板的简单对话框。
-
-    最小形态：多行文本框预填旧模板 + 固定字段展示 + 确认/取消。
-    label / output / secret_names / arity 均不可改，所以不带编辑控件。
-    """
-
-    def __init__(self, parent: QWidget, label: str,
-                 old_template: str, output_path: str, service: str) -> None:
-        super().__init__(parent)
-        self.setWindowTitle(f"修改模板 — {label}")
-        self.resize(640, 320)
-
-        info = QLabel(
-            f"label   : {label}\n"
-            f"service : {service}\n"
-            f"output  : {output_path or '(unknown)'}\n\n"
-            "保存时将自动：\n"
-            "① 用新模板重新编译 + 签名 sealed binary（覆盖上面的 output）\n"
-            "② 生成新密钥 K 并写入钥匙串（旧 service 会被自动删除）\n"
-            "③ secret 占位符集合不能变（改了会被拒绝）\n"
-            "此操作不触发系统授权弹窗。")
-        info.setWordWrap(True)
-
-        self._editor = QPlainTextEdit(self)
-        self._editor.setPlainText(old_template)
-        self._editor.setPlaceholderText(
-            "例如：/usr/bin/zip -r {{arg:1}} {{arg:2}}")
-
-        btn_ok = QPushButton("保存")
-        btn_cancel = QPushButton("取消")
-        btn_ok.setDefault(True)
-        btn_ok.clicked.connect(self.accept)
-        btn_cancel.clicked.connect(self.reject)
-
-        btns = QHBoxLayout()
-        btns.addStretch(1)
-        btns.addWidget(btn_cancel)
-        btns.addWidget(btn_ok)
-
-        lay = QVBoxLayout(self)
-        lay.addWidget(info)
-        lay.addWidget(self._editor, 1)
-        lay.addLayout(btns)
-
-    def new_template(self) -> str:
-        return self._editor.toPlainText().strip()

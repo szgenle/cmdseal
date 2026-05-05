@@ -40,6 +40,45 @@ compose pipelines visually.
   emits one `--command` per segment when building the `cmdseal.py`
   invocation, matching the CLI's `action="append"` behaviour.
 
+### Changed
+
+- **Command templates are now masked at storage time.** `do_seal`
+  no longer writes the raw command template into the keychain
+  item's `kSecAttrComment` metadata. It runs every segment through
+  the new `mask_template()` helper first, so the `template` and
+  `segments` fields contain the same `***`-redacted form that
+  `cmdseal list` displays. The unredacted template exists only
+  inside the AEAD ciphertext (i.e. only the sealed binary can
+  read it). Result: `cmdseal list` / `cmdseal list --json` now
+  expose **zero plaintext secrets** regardless of how the template
+  was authored. Idempotent: re-masking already-masked input is a
+  no-op, so legacy items that later get re-sealed converge to the
+  same shape.
+- **`mask_template()` masking rules (authoritative spec in
+  [tests/test_mask_template.py](./tests/test_mask_template.py),
+  28 cases).** First token is preserved; `{{arg:N}}` /
+  `{{secret:NAME}}` placeholders are preserved; GNU long flags
+  (`--foo`) are preserved, while `--key=val` becomes `--key=***`;
+  POSIX short flags keep the exact-2-char form (`-p`) but collapse
+  any Unix-style glued form (`-pPass`, `-xzvf`) to `first-two +
+  ***`; any other bare token (including absolute paths that would
+  otherwise leak filesystem layout) becomes `***`.
+
+### Removed
+
+- **`edit-template` end-to-end**. In line with the stricter
+  "CLI never sees plaintext, GUI needs an auth gate before seeing
+  plaintext" policy, the edit-template surface has been removed
+  wholesale: `cmdseal.py` drops `do_edit_template()` + its
+  subparser + the shim whitelist entry + the main dispatch;
+  `gui/backend.py::edit_template()` and the Runner Management
+  window's right-click "Edit template…" menu item / dialog are
+  gone; `tests/test_edit_template.py` is deleted; USER_GUIDE
+  §3.2, §4.4, §9.2 and the cheatsheet in Appendix A are trimmed
+  accordingly. To change a template, delete the runner and seal
+  a new one — this keeps the security model simple and removes
+  the AEAD-non-reversibility footguns around the secret-name set.
+
 ### Fixed
 
 - **Template wizard dangling reference.** After v1.2.1 renamed the

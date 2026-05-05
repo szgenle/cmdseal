@@ -35,6 +35,40 @@ v1.2 的 GUI 配套版本。将 CLI 端已具备的多段管道能力带到
   `cmdseal.py` 命令行时，会以每段一个 `--command` 的方式追加，
   与 CLI 的 `action="append"` 语义对齐。
 
+### 变更
+
+- **命令模板现在在存储层就已打码**。`do_seal` 不再
+  将原始命令模板写入 keychain item 的 `kSecAttrComment` 元
+  数据，而是先经新增的 `mask_template()` helper 逐段打码，
+  在 `template` 与 `segments` 字段里存与 `cmdseal list` 展示完
+  全一致的 `***` 脱敏后形式。未脱敏的模板仅存在于 AEAD
+  密文内部（只有 sealed binary 能读到）。效果：`cmdseal
+  list` / `cmdseal list --json` 不再暴露任何明文 secret，
+  无论模板原本如何书写。幂等：对已打码的输入再调一次
+  仅返回相同结果，因此旧数据后续如被重新 seal 会自然收敛
+  到同一形式。
+- **`mask_template()` 打码规则**（权威规范见
+  [tests/test_mask_template.py](./tests/test_mask_template.py)
+  的 28 个用例）：首 token 保留；`{{arg:N}}` /
+  `{{secret:NAME}}` 占位符保留；GNU 长选项（`--foo`）保留，
+  `--key=val` 脱敏为 `--key=***`；POSIX 短选项保留精确 2
+  字符形式（`-p`）但将 Unix 粘连形式（`-pPass`、`-xzvf`）
+  折叠为 `前两字符 + ***`；其他裸 token（包括会泄露文件
+  系统布局的绝对路径）脱敏为 `***`。
+
+### 移除
+
+- **`edit-template` 全链路移除**。按照更严格的“CLI 永远看不到
+  明文，GUI 查看明文前必须有一道授权关卡”策略，edit-template
+  被整个拿掉：`cmdseal.py` 删除 `do_edit_template()`、
+  其 subparser、shim 白名单条目和 main dispatch 分支；
+  `gui/backend.py::edit_template()` 与 Runner 管理窗的右键
+  “修改模板…”菜单项 / 对话框同步移除；`tests/test_edit_template.py`
+  删除；USER_GUIDE 的 §3.2、§4.4、§9.2 与附录 A 的
+  cheatsheet 一并清理。今后如需改模板，请删除 runner 后重新
+  seal。这种做法维持安全模型最简洁，也消除了 AEAD 不可逆
+  导致的 secret 名集合不容多改等隐患。
+
 ### 修复
 
 - **模板向导的悬挂引用**。v1.2.1 把 `SealRequest.command` 重命名为
