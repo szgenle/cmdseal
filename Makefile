@@ -75,7 +75,14 @@ print('smoke: exit=', rc, 'backend_ok=', backend.CMDSEAL_PY.is_file())"
 .PHONY: i18n-update i18n-release
 I18N_TS := gui/translations/cmdseal_zh_CN.ts
 I18N_QM := gui/translations/cmdseal_zh_CN.qm
-I18N_SRC := gui/main_window.py gui/runner_list.py gui/preferences.py
+I18N_SRC := gui/main_window.py gui/runner_list.py gui/preferences.py \
+            gui/seal_wizard.py \
+            gui/template_wizard/_core.py \
+            gui/template_wizard/_wizard.py \
+            gui/template_wizard/_command_page.py \
+            gui/template_wizard/_param_page.py \
+            gui/template_wizard/_output_page.py \
+            gui/template_wizard/_exec_page.py
 
 i18n-update: ## 从源码扫出最新 UI 字符串到 .ts
 	@mkdir -p gui/translations
