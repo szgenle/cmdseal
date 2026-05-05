@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from .runner_list import RunnerListWindow
 from .seal_wizard import SealWizard
+from .template_wizard import TemplateWizard
 
 
 class MainWindow(QMainWindow):
@@ -30,6 +31,7 @@ class MainWindow(QMainWindow):
         self.resize(520, 320)
 
         self._wizard: SealWizard | None = None
+        self._template_wizard: TemplateWizard | None = None
         self._runner_list: RunnerListWindow | None = None
 
         title = QLabel("cmdseal")
@@ -46,19 +48,28 @@ class MainWindow(QMainWindow):
         subtitle.setAlignment(Qt.AlignCenter)
         subtitle.setWordWrap(True)
 
-        self.btn_seal = QPushButton("新建 seal…")
+        self.btn_template = QPushButton("从命令生成模板...")
+        self.btn_template.setMinimumHeight(40)
+        self.btn_template.clicked.connect(self._open_template_wizard)
+
+        self.btn_seal = QPushButton("高级模式...")
         self.btn_seal.setMinimumHeight(40)
         self.btn_seal.clicked.connect(self._open_seal_wizard)
 
-        self.btn_manage = QPushButton("管理 runner…")
+        self.btn_manage = QPushButton("管理 runner...")
         self.btn_manage.setMinimumHeight(40)
         self.btn_manage.clicked.connect(self._open_runner_list)
 
-        btn_row = QHBoxLayout()
-        btn_row.addStretch(1)
-        btn_row.addWidget(self.btn_seal)
-        btn_row.addWidget(self.btn_manage)
-        btn_row.addStretch(1)
+        btn_row1 = QHBoxLayout()
+        btn_row1.addStretch(1)
+        btn_row1.addWidget(self.btn_template)
+        btn_row1.addWidget(self.btn_seal)
+        btn_row1.addStretch(1)
+
+        btn_row2 = QHBoxLayout()
+        btn_row2.addStretch(1)
+        btn_row2.addWidget(self.btn_manage)
+        btn_row2.addStretch(1)
 
         central = QWidget(self)
         lay = QVBoxLayout(central)
@@ -66,9 +77,23 @@ class MainWindow(QMainWindow):
         lay.addWidget(title)
         lay.addWidget(subtitle)
         lay.addSpacing(24)
-        lay.addLayout(btn_row)
+        lay.addLayout(btn_row1)
+        lay.addSpacing(12)
+        lay.addLayout(btn_row2)
         lay.addStretch(2)
         self.setCentralWidget(central)
+
+    def _open_template_wizard(self) -> None:
+        # 保持引用，避免被 GC；关闭时释放
+        self._template_wizard = TemplateWizard(self)
+        self._template_wizard.finished.connect(self._on_template_wizard_finished)
+        self._template_wizard.show()
+
+    def _on_template_wizard_finished(self, _result: int) -> None:
+        # 模板生成成功后如果 runner 管理窗开着，顺手刷一下
+        if self._runner_list is not None and self._runner_list.isVisible():
+            self._runner_list.refresh()
+        self._template_wizard = None
 
     def _open_seal_wizard(self) -> None:
         # 保持引用，避免被 GC；关闭时释放
