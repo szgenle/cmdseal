@@ -1,5 +1,7 @@
 # Third-Party Licenses
 
+> 中文版：[THIRD_PARTY_LICENSES.zh.md](./THIRD_PARTY_LICENSES.zh.md)
+
 `cmdseal` itself is released under the [MIT License](./LICENSE).
 This document enumerates the third-party components that ship with
 or are required by `cmdseal`, and the licenses under which we use them.
