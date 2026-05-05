@@ -7,7 +7,7 @@ hiddenimports += collect_submodules('gui')
 
 a = Analysis(
     ['run_gui.py'],
-    pathex=['/Users/ws/Dev/cmdseal'],
+    pathex=['.'],
     binaries=[],
     datas=[('cmdseal.py', 'assets'), ('cmdseal_helper.c', 'assets'), ('runner_aead_template.c', 'assets')],
     hiddenimports=hiddenimports,
