@@ -44,7 +44,7 @@ from PySide6.QtWidgets import (
     QWizardPage,
 )
 
-from . import backend
+from . import backend, settings
 
 # 与 cmdseal.py 同款占位符语法；GUI 侧仅用于扫描 + 预览，不做语义判断。
 PLACEHOLDER_RE = re.compile(r"\{\{(secret|arg):([A-Za-z0-9_]+)\}\}")
@@ -426,15 +426,35 @@ class SecretsPage(QWizardPage):
 # ---------------------------------------------------------------------------
 
 class OptionsPage(QWizardPage):
-    """第 3 步：输出路径 / label / 签名身份。"""
+    """第 3 步：输出路径 / label / 签名身份。
 
-    def __init__(self) -> None:
+    v1.2.3 起与 TemplateWizard.OutputConfigPage 行为对齐：
+    - 从偏好面板读取 output_dir / name_prefix
+    - initializePage() 依据首段首 token 自动回填默认路径
+    - 新增 path_hint 说明默认目录
+    这样两条向导路径的最后一步只在「签名身份 / --no-sign」上存在
+    差异，其余字段的默认值完全一致。
+    """
+
+    def __init__(
+        self,
+        output_dir: Path | None = None,
+        name_prefix: str = "seal_",
+    ) -> None:
         super().__init__()
         self.setTitle("输出与签名")
         self.setSubTitle("选择生成路径与签名方式。ad-hoc 即 codesign -s -。")
 
+        self._output_dir = (
+            Path(output_dir).expanduser() if output_dir
+            else Path.home() / "cmdseal" / "bin"
+        )
+        self._name_prefix = name_prefix or "seal_"
+
         self.output_edit = QLineEdit()
-        self.output_edit.setPlaceholderText("/absolute/path/to/sealed_binary")
+        self.output_edit.setPlaceholderText(
+            str(self._output_dir / f"{self._name_prefix}program")
+        )
         browse = QPushButton("浏览…")
         browse.clicked.connect(self._browse)
         out_row = QWidget()
@@ -442,6 +462,13 @@ class OptionsPage(QWizardPage):
         out_lay.setContentsMargins(0, 0, 0, 0)
         out_lay.addWidget(self.output_edit, 1)
         out_lay.addWidget(browse)
+
+        self.path_hint = QLabel(
+            f"默认文件名为 <code>{self._name_prefix}&lt;原命令名&gt;</code>，"
+            f"默认保存到 {self._output_dir}/（首次使用会自动创建）。"
+        )
+        self.path_hint.setWordWrap(True)
+        self.path_hint.setStyleSheet("color: #666; font-size: 11px;")
 
         self.label_edit = QLineEdit()
         self.label_edit.setPlaceholderText("留空则按输出文件名自动生成")
@@ -459,6 +486,7 @@ class OptionsPage(QWizardPage):
         form = QFormLayout(self)
         form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         form.addRow("输出二进制：", out_row)
+        form.addRow("", self.path_hint)
         form.addRow("Label（可选）：", self.label_edit)
         form.addRow("Keychain 账号：", self.user_edit)
         form.addRow("签名身份：", self.signing_combo)
@@ -468,9 +496,45 @@ class OptionsPage(QWizardPage):
         self.output_edit.textChanged.connect(self.completeChanged)
         self.user_edit.textChanged.connect(self.completeChanged)
 
+    def initializePage(self) -> None:
+        """首次进入本页时按首段首 token 推断默认路径。
+
+        若用户已手动填过，保留现值；与 OutputConfigPage.initializePage 同策略。
+        """
+        if self.output_edit.text().strip():
+            return
+        wiz = self.wizard()
+        if not isinstance(wiz, SealWizard):
+            return
+        name = self._infer_program_name(wiz.command_page.commands())
+        self.output_edit.setText(str(self._output_dir / name))
+
+    def _infer_program_name(self, cmds: list[str]) -> str:
+        """参考 ParameterSelectionPage.program_name，额外处理占位符首 token。
+
+        SealWizard 首段允许直接写 ``{{arg:1}}`` 或 ``$VAR``，无法映射到一个
+        具体的可执行名；这种情况下退化到 ``<prefix>sealed``。
+        """
+        if not cmds:
+            return f"{self._name_prefix}sealed"
+        try:
+            toks = shlex.split(cmds[0])
+        except ValueError:
+            return f"{self._name_prefix}sealed"
+        if not toks:
+            return f"{self._name_prefix}sealed"
+        first = toks[0]
+        if first.startswith("{{") or first.startswith("$"):
+            return f"{self._name_prefix}sealed"
+        base = Path(first).name or "sealed"
+        if self._name_prefix and base.startswith(self._name_prefix):
+            return base
+        return f"{self._name_prefix}{base}"
+
     def _browse(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "选择输出路径", self.output_edit.text() or str(Path.home()))
+            self, "选择输出路径",
+            self.output_edit.text() or str(self._output_dir))
         if path:
             self.output_edit.setText(path)
 
@@ -653,9 +717,17 @@ class SealWizard(QWizard):
         self.setOption(QWizard.IndependentPages, False)
         self.resize(820, 620)
 
+        # 与 TemplateWizard 对称：打开时读一次偏好快照。向导期间改
+        # Preferences 不会热生效（关闭重开生效），避免半路换默认目录
+        # 导致 OptionsPage 的路径预览/提示文案不一致。
+        self.prefs = settings.load_template_prefs()
+
         self.command_page = CommandPage()
         self.secrets_page = SecretsPage()
-        self.options_page = OptionsPage()
+        self.options_page = OptionsPage(
+            output_dir=self.prefs.output_dir,
+            name_prefix=self.prefs.name_prefix,
+        )
         self.execute_page = ExecutePage()
 
         self.addPage(self.command_page)
