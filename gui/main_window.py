@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .preferences import PreferencesDialog
 from .runner_list import RunnerListWindow
 from .seal_wizard import SealWizard
 from .template_wizard import TemplateWizard
@@ -33,6 +35,8 @@ class MainWindow(QMainWindow):
         self._wizard: SealWizard | None = None
         self._template_wizard: TemplateWizard | None = None
         self._runner_list: RunnerListWindow | None = None
+
+        self._build_menu()
 
         title = QLabel("cmdseal")
         title.setAlignment(Qt.AlignCenter)
@@ -121,3 +125,24 @@ class MainWindow(QMainWindow):
 
     def _on_runner_list_destroyed(self, *_args) -> None:
         self._runner_list = None
+
+    # ------------------------------------------------------------------
+    # 菜单栏
+    # ------------------------------------------------------------------
+    def _build_menu(self) -> None:
+        """搭菜单栏。macOS 下 Qt 会自动识别 Preferences 的 role，
+        把它搬到 “cmdseal → 偏好设置…” 标准位置（快捷键 ⌘,）。
+        """
+        mb = self.menuBar()
+        app_menu = mb.addMenu("cmdseal")
+
+        prefs_action = QAction("偏好设置…", self)
+        # 显式指定 PreferencesRole：确保被搬到 macOS 应用菜单的正确位置
+        prefs_action.setMenuRole(QAction.PreferencesRole)
+        prefs_action.setShortcut(QKeySequence.Preferences)
+        prefs_action.triggered.connect(self._open_preferences)
+        app_menu.addAction(prefs_action)
+
+    def _open_preferences(self) -> None:
+        dlg = PreferencesDialog(self)
+        dlg.exec()

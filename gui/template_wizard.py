@@ -37,6 +37,10 @@ from PySide6.QtWidgets import (
 )
 
 from . import backend
+from . import settings
+
+#: 以下三项仍保留作为 fallback / 测试导入来源；真正的默认值由 settings.py 提供
+#: 的 QSettings 驱动。详见 TemplateWizard.__init__ 中的 load_template_prefs()。
 
 #: 默认输出目录：用户专属，避免 /usr/local/bin 的 sudo 依赖
 DEFAULT_OUTPUT_DIR = Path.home() / "cmdseal" / "bin"
@@ -241,8 +245,10 @@ class CommandLineEdit(QPlainTextEdit):
 class CommandInputPage(QWizardPage):
     """第 1 步：输入命令，并真实运行一次成功才允许下一步。"""
 
-    def __init__(self) -> None:
+    def __init__(self, timeout_ms: int = TRY_RUN_TIMEOUT_MS) -> None:
         super().__init__()
+        #: 试运行超时（毫秒）。由偏好面板控制；未传则沿用历史硬编码。
+        self._timeout_ms = timeout_ms
         self.setTitle("输入命令")
         self.setSubTitle(
             "输入真实可执行的命令。点击「试运行」确认命令能正常执行后再下一步。\n"
@@ -418,7 +424,7 @@ class CommandInputPage(QWizardPage):
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._on_timeout)
-        self._timer.start(TRY_RUN_TIMEOUT_MS)
+        self._timer.start(self._timeout_ms)
 
     def _on_stdout(self) -> None:
         if not self._proc:
@@ -432,7 +438,7 @@ class CommandInputPage(QWizardPage):
 
     def _on_timeout(self) -> None:
         if self._proc is not None:
-            self.log.appendPlainText(f"⚠ 超时（{TRY_RUN_TIMEOUT_MS // 1000}s），已终止")
+            self.log.appendPlainText(f"⚠ 超时（{self._timeout_ms // 1000}s），已终止")
             self._proc.kill()
 
     def _on_finished(self, code: int, status: QProcess.ExitStatus) -> None:
@@ -482,8 +488,10 @@ class ParameterSelectionPage(QWizardPage):
         "padding: 6px 10px; font-weight: bold; }"
     )
 
-    def __init__(self) -> None:
+    def __init__(self, name_prefix: str = SEALED_NAME_PREFIX) -> None:
         super().__init__()
+        #: 文件名前缀；供 program_name() 拼默认输出名。由偏好面板控制。
+        self._name_prefix = name_prefix
         self.setTitle("选择运行时参数")
         self.setSubTitle("点击命令中的 token 切换「字面量 / 运行时参数」。")
 
@@ -580,7 +588,7 @@ class ParameterSelectionPage(QWizardPage):
         return build_template(self._tokens, self._selected)
 
     def program_name(self) -> str:
-        """用于生成默认输出文件名：统一加 SEALED_NAME_PREFIX 前缀以区分原命令。
+        """用于生成默认输出文件名：统一加 ``self._name_prefix`` 前缀以区分原命令。
 
         特例：
         - 命令本身已以前缀开头（如用户给封装产物再封装）→ 不重复加前缀
@@ -589,9 +597,9 @@ class ParameterSelectionPage(QWizardPage):
         if not self._tokens:
             return "sealed"
         base = Path(self._tokens[0]).name or "sealed"
-        if base.startswith(SEALED_NAME_PREFIX):
+        if self._name_prefix and base.startswith(self._name_prefix):
             return base
-        return SEALED_NAME_PREFIX + base
+        return (self._name_prefix or "") + base
 
 
 # ---------------------------------------------------------------------------
@@ -601,13 +609,24 @@ class ParameterSelectionPage(QWizardPage):
 class OutputConfigPage(QWizardPage):
     """第 3 步：输出路径。"""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        output_dir: Path = DEFAULT_OUTPUT_DIR,
+        name_prefix: str = SEALED_NAME_PREFIX,
+    ) -> None:
         super().__init__()
+        #: 默认输出目录；由偏好面板控制（带 mkdir 延迟到实际使用时）
+        self._output_dir = Path(output_dir).expanduser()
+        #: 文件名前缀；仅用于提示文案。实际拼名在 ParameterSelectionPage.program_name() 完成
+        self._name_prefix = name_prefix
+
         self.setTitle("保存位置")
         self.setSubTitle("选择封装后的二进制保存到哪里。")
 
         self.output_edit = QLineEdit()
-        self.output_edit.setPlaceholderText(str(DEFAULT_OUTPUT_DIR / f"{SEALED_NAME_PREFIX}program"))
+        self.output_edit.setPlaceholderText(
+            str(self._output_dir / f"{self._name_prefix}program")
+        )
         browse = QPushButton("浏览…")
         browse.clicked.connect(self._browse)
         out_row = QWidget()
@@ -617,8 +636,8 @@ class OutputConfigPage(QWizardPage):
         out_lay.addWidget(browse)
 
         self.path_hint = QLabel(
-            f"默认文件名为 <code>{SEALED_NAME_PREFIX}&lt;原命令名&gt;</code>，用以与原命令区分。\n"
-            f"默认保存到 {DEFAULT_OUTPUT_DIR}/（首次使用会自动创建）。\n"
+            f"默认文件名为 <code>{self._name_prefix}&lt;原命令名&gt;</code>，用以与原命令区分。\n"
+            f"默认保存到 {self._output_dir}/（首次使用会自动创建）。\n"
             "若要全局调用，可手动指定 /usr/local/bin/ 等 PATH 中的目录，"
             "或自建软链接。"
         )
@@ -648,12 +667,12 @@ class OutputConfigPage(QWizardPage):
         if not isinstance(wiz, TemplateWizard):
             return
         name = wiz.param_page.program_name()
-        self.output_edit.setText(str(DEFAULT_OUTPUT_DIR / name))
+        self.output_edit.setText(str(self._output_dir / name))
 
     def _browse(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
             self, "选择输出路径",
-            self.output_edit.text() or str(DEFAULT_OUTPUT_DIR))
+            self.output_edit.text() or str(self._output_dir))
         if path:
             self.output_edit.setText(path)
 
@@ -820,9 +839,21 @@ class TemplateWizard(QWizard):
         self.setOption(QWizard.IndependentPages, False)
         self.resize(840, 640)
 
-        self.command_page = CommandInputPage()
-        self.param_page = ParameterSelectionPage()
-        self.output_page = OutputConfigPage()
+        # 从偏好面板读当前默认值，快照存入向导实例。
+        # 读一次用到底：向导打开期间修改 Preferences 不会热生效（关闭重开生效），
+        # 避免半路换默认目录导致第 3 页的提示文案/路径不一致。
+        self.prefs = settings.load_template_prefs()
+
+        self.command_page = CommandInputPage(
+            timeout_ms=self.prefs.try_run_timeout_ms,
+        )
+        self.param_page = ParameterSelectionPage(
+            name_prefix=self.prefs.name_prefix,
+        )
+        self.output_page = OutputConfigPage(
+            output_dir=self.prefs.output_dir,
+            name_prefix=self.prefs.name_prefix,
+        )
         self.execute_page = ExecutionPage()
 
         self.addPage(self.command_page)
