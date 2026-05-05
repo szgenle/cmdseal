@@ -773,6 +773,92 @@ def do_delete(args):
     return 0
 
 
+def do_edit_template(args):
+    """Edit a sealed runner's command template in place.
+
+    Semantics (see gui/backend.py::edit_template docstring):
+      - label / output_path / account are preserved (read from the old
+        item's kSecAttrComment metadata)
+      - K is rotated (new random K → new ciphertext → new cdhash → new ACL)
+      - The new template's ``{{secret:NAME}}`` set MUST equal the old one
+        (AEAD is non-reversible, so we cannot re-use sealed secret values
+        if the name set changes; force the user to delete + re-seal)
+      - Legacy items (no comment metadata) are rejected — caller is
+        instructed to delete and re-create via ``cmdseal seal``
+      - Zero additional keychain authorization prompts: helper acts as
+        the old item's ACL owner for both delete and add (NEXT.md §5.8)
+    """
+    check_platform_and_tools()
+
+    # 1. Locate the old item by service (exact match via prefix list).
+    items = kc_list(args.service)
+    match = next(
+        (it for it in items if it.get("service") == args.service), None)
+    if match is None:
+        sys.exit(
+            f"cmdseal edit-template: no runner found with "
+            f"service={args.service!r}")
+    raw = match.get("comment")
+    if not raw:
+        sys.exit(
+            f"cmdseal edit-template: runner {args.service!r} is legacy "
+            f"(no metadata); cannot edit template in place. Please "
+            f"delete and re-create via `cmdseal seal`.")
+    try:
+        meta = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        sys.exit(
+            f"cmdseal edit-template: runner {args.service!r} has invalid "
+            f"metadata; cannot edit template in place.")
+
+    old_account = match.get("account") or args.user
+    old_output = meta.get("output_path")
+    old_label = meta.get("label") or ""
+    old_secret_names = sorted(meta.get("secret_names") or [])
+
+    if not old_output:
+        sys.exit(
+            f"cmdseal edit-template: runner {args.service!r} metadata "
+            f"missing output_path; cannot edit template in place.")
+
+    # 2. New template's secret set must equal the old set.
+    commands = args.command or []
+    if not commands:
+        sys.exit("cmdseal edit-template: --command is required")
+    if len(commands) > MAX_PIPE_SEGMENTS:
+        sys.exit(
+            f"cmdseal edit-template: too many --command segments "
+            f"({len(commands)}); max is {MAX_PIPE_SEGMENTS}")
+    new_secret_names = set()
+    for cmd_str in commands:
+        for kind, payload in tokenize_command(cmd_str):
+            if kind == "secret":
+                new_secret_names.add(payload)
+    if sorted(new_secret_names) != old_secret_names:
+        sys.exit(
+            "cmdseal edit-template: secret set mismatch.\n"
+            f"  old: {old_secret_names}\n"
+            f"  new: {sorted(new_secret_names)}\n"
+            "The new template must reference exactly the same set of "
+            "{{secret:NAME}} placeholders as the original. To change "
+            "the secret set, delete the runner and re-create it.")
+
+    # 3. Inject preserved fields onto args and delegate to do_seal with
+    #    the old service flagged for deletion. do_seal will:
+    #    - generate a fresh K and ciphertext
+    #    - recompile + re-sign the binary at the SAME output_path
+    #      (the on-disk file is overwritten atomically by build_and_sign)
+    #    - delete the old keychain item (owner-authenticated, silent)
+    #    - write the new keychain item with fresh comment metadata
+    args.output = old_output
+    args.label = old_label
+    args.user = old_account
+    print(f"[*] editing template for: {args.service}")
+    print(f"    output   : {old_output}")
+    print(f"    old label: {old_label}")
+    return do_seal(args, old_service_to_delete=args.service)
+
+
 # ----------------------------------------------------------------------
 # CLI
 # ----------------------------------------------------------------------
@@ -844,10 +930,37 @@ def parse_args():
     pd.add_argument("--user", default=os.environ.get("USER", "root"),
                     help="account name (default: $USER)")
 
+    pe = sub.add_parser("edit-template",
+                        help="edit a sealed runner's command template "
+                             "in place (rebuilds binary + rotates K; "
+                             "secret set must match the original)")
+    pe.add_argument("--service", required=True,
+                    help="keychain service name of the runner to edit "
+                         "(e.g. cmdseal.ab12cd34.K)")
+    pe.add_argument("--command", required=True, action="append",
+                    metavar="CMD",
+                    help="new command template (shell-quoted string). "
+                         "Pass multiple times to form a pipeline.")
+    pe.add_argument("--user", default=os.environ.get("USER", ""),
+                    help="keychain account name (default: $USER; "
+                         "overridden by the old item's account if found)")
+    pe.add_argument("--template", default=str(DEFAULT_TEMPLATE),
+                    help=f"path to runner template "
+                         f"(default: {DEFAULT_TEMPLATE})")
+    pe.add_argument("--no-sign", action="store_true",
+                    help="skip codesign step (dev only)")
+    pe.add_argument("--signing-identity", default="-",
+                    help="identity passed to `codesign -s` (default: ad-hoc)")
+    pe.add_argument("--keep-source", action="store_true",
+                    help="keep the intermediate .c file for inspection")
+    pe.add_argument("--secrets-from-stdin", action="store_true",
+                    help="read secrets as NAME=VALUE lines from stdin")
+
     # Back-compat: if the user passes --command/--output at the top
     # level with no subcommand, treat as `seal`.
     if len(sys.argv) >= 2 and sys.argv[1] not in (
-            "seal", "rotate", "list", "delete", "-h", "--help"):
+            "seal", "rotate", "list", "delete", "edit-template",
+            "-h", "--help"):
         # Inject default subcommand.
         args = p.parse_args(["seal"] + sys.argv[1:])
     else:
@@ -868,6 +981,8 @@ def main():
         return do_list(args)
     elif args.subcommand == "delete":
         return do_delete(args)
+    elif args.subcommand == "edit-template":
+        return do_edit_template(args)
     else:
         sys.exit(f"cmdseal: unknown subcommand {args.subcommand!r}")
 
