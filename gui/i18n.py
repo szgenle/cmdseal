@@ -53,6 +53,38 @@ def _translations_dir() -> Path:
     return here  # may not exist; caller handles missing .qm gracefully
 
 
+def _detect_macos_language() -> str | None:
+    """在 macOS 上通过 ``defaults read -g AppleLanguages`` 读系统语言偏好。
+
+    背景：当终端 LANG 被强制为 ``C``/``C.UTF-8`` 时，Qt 的 ``QLocale.system()``
+    会返回 ``C``，导致无法从系统偏好推出用户语言。此时改走 macOS 原生
+    API 读取系统设置里的语言首选项。返回首位语言码（如 ``zh-Hans-CN``）或 None。
+    """
+    if sys.platform != "darwin":
+        return None
+    try:
+        import re
+        import subprocess
+
+        out = subprocess.run(
+            ["defaults", "read", "-g", "AppleLanguages"],
+            capture_output=True, text=True, timeout=2,
+        )
+        if out.returncode != 0:
+            return None
+        # 输出形如：
+        #   (
+        #       "zh-Hans-CN",
+        #       "en-CN"
+        #   )
+        m = re.search(r'"([^"]+)"', out.stdout)
+        if m:
+            return m.group(1)
+    except Exception:
+        return None
+    return None
+
+
 def _resolve_locale(pref: str) -> str:
     """Return the effective locale code given the user preference.
 
@@ -61,8 +93,17 @@ def _resolve_locale(pref: str) -> str:
     """
     if pref and pref != "auto":
         return pref
-    sys_name = QLocale.system().name()  # e.g. "zh_CN", "zh_TW", "en_US"
-    if sys_name.startswith("zh"):
+    # ① 先问 Qt：QLocale.system().name() 和 uiLanguages() 任一以 zh 开头即命中
+    candidates: list[str] = []
+    qloc = QLocale.system()
+    candidates.append(qloc.name())
+    candidates.extend(qloc.uiLanguages())
+    for name in candidates:
+        if name and name.lower().startswith("zh"):
+            return "zh_CN"
+    # ② macOS 兄弟部队：shell LANG=C 时 Qt 会失灵，改走原生 AppleLanguages
+    mac_lang = _detect_macos_language()
+    if mac_lang and mac_lang.lower().startswith("zh"):
         return "zh_CN"
     return "en"
 
