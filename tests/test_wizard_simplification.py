@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PySide6.QtWidgets import QApplication
-from gui.seal_wizard import SealWizard, _scan_placeholders
+from gui.seal_wizard import SealWizard, _scan_placeholders, _scan_placeholders_many
 
 
 def test_scan_placeholders():
@@ -66,7 +66,8 @@ def test_wizard_flow():
     
     # 测试 2a: 无 secret 的命令 - SecretsPage 应该被跳过
     print("\n测试 2a: 字面量密码命令（无 {{secret:*}}）")
-    wizard.command_page.edit.setPlainText("zip -j -P mypassword {{arg:1}} {{arg:2}}")
+    wizard.command_page._segments[0].edit.setPlainText(
+        "zip -j -P mypassword {{arg:1}} {{arg:2}}")
     
     # 模拟向导流程
     wizard.next()  # 从 CommandPage (0) 到 SecretsPage (1)
@@ -83,7 +84,8 @@ def test_wizard_flow():
     # 测试 2b: 有 secret 的命令 - SecretsPage 应该显示
     print("\n测试 2b: 使用 {{secret:}} 的命令")
     wizard2 = SealWizard()
-    wizard2.command_page.edit.setPlainText("zhmm-cli --pwd {{secret:master}} -s {{arg:1}}")
+    wizard2.command_page._segments[0].edit.setPlainText(
+        "zhmm-cli --pwd {{secret:master}} -s {{arg:1}}")
     
     secrets_page2 = wizard2.secrets_page
     secrets_page2.initializePage()

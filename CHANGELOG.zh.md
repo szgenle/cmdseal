@@ -10,6 +10,39 @@
 [`pyproject.toml`](./pyproject.toml) 中的 `cmdseal-gui`（PySide6
 前端包）拥有独立的版本号，不需要与之保持同步。
 
+## [1.2.1] - 未发布
+
+v1.2 的 GUI 配套版本。将 CLI 端已具备的多段管道能力带到
+ PySide6 seal 向导，允许用户可视化地编排管道。
+
+### 新增
+
+- **向导端多段编辑器**。*命令模板* 页现已改为最多 8 段的
+  编辑框堆叠，配备 `[➕ 添加管道段]` 按钮与每段的
+  `[×]` 删除按钮。每段独立展示 tokens / secrets / args 解析
+  结果，页底的全局摘要合并段数、跨段 `{{arg:N}}` 集和去重
+  后的 secret 名。
+- **跨段 secret 合并**。`SecretsPage` 会扫描所有段并去重
+  secret 名，与 CLI 的全局编号语义完全一致。
+- **按段预览 argv**。`ExecutePage` 将每一段以 `seg N :` 的
+  形式单独渲染，secret 统一脱敏为 `***`。
+- **`SealRequest.commands: list[str]`**。`gui/backend.py` 在构造
+  `cmdseal.py` 命令行时，会以每段一个 `--command` 的方式追加，
+  与 CLI 的 `action="append"` 语义对齐。
+
+### 安全
+
+- **安全姿态无变化**。GUI 仍仅作为 `cmdseal.py` 的薄包装，
+  不复制任何加密 / 分发逻辑。与 CLI 之间的 `--command` 契约
+  严格保持，v1.2 runner 侧的所有保障（无 shell、绝对路径、
+  `DYLD_*` 剥离、hardened runtime）在多段场景下数值不变。
+
+### 兼容性
+
+- 单段向导使用产出的 CLI 调用字节级等价 v1.1。
+- `SealRequest.command` 保留为只读兼容属性（返回首段），
+  避免破坏现有的日志 / 预览调用链。
+
 ## [1.2.0] - 未发布
 
 管道支持版本。在保留 v1.1 全部安全模型（运行时完全不经 shell、

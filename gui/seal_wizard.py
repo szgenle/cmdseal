@@ -1,14 +1,19 @@
-"""seal 向导窗（第一版原型）。
+"""seal 向导窗（v1.2.1：CommandPage 支持多段管道）。
 
 四步式 QWizard：
   1. CommandPage  — 填写命令模板，解析 {{secret:*}} / {{arg:*}}
+                    支持多段：每段一个编辑框，[+ 添加管道段] 堆叠
+                    至最多 MAX_PIPE_SEGMENTS=8 段；段间获得上一段 stdout。
   2. SecretsPage  — 根据上一步扫描出的 secret 名动态生成遮蔽输入
+                    （多段间的 secret 合并去重）
   3. OptionsPage  — 输出路径 / label / 签名身份 / --no-sign
-  4. ExecutePage  — 预览 argv，点击按钮后用 QProcess 异步执行
-                    cmdseal.py，实时把 stdout/stderr 追加到日志视图
+  4. ExecutePage  — 预览 argv（各段单独显示），点击按钮后用 QProcess
+                    异步执行 cmdseal.py，实时把 stdout/stderr 追加到
+                    日志视图
 
 设计约束：
 - GUI 不复制任何加密逻辑，一切交给 cmdseal.py（见 backend.py）
+- 多段通过 --command 重复追加传给 CLI，GUI 层不用 shell 千预分段
 - secret 通过 QProcess stdin 以 NAME=VALUE 行投递，内存里不落盘
 - 预览里 secret 一律渲染为 ***，避免泄露到截图 / 日志
 """
@@ -26,11 +31,13 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
     QWizard,
@@ -41,6 +48,9 @@ from . import backend
 
 # 与 cmdseal.py 同款占位符语法；GUI 侧仅用于扫描 + 预览，不做语义判断。
 PLACEHOLDER_RE = re.compile(r"\{\{(secret|arg):([A-Za-z0-9_]+)\}\}")
+
+# 与 cmdseal.py::MAX_PIPE_SEGMENTS 保持一致。
+MAX_PIPE_SEGMENTS = 8
 
 
 def _scan_placeholders(command: str) -> tuple[list[str], list[str]]:
@@ -65,6 +75,23 @@ def _scan_placeholders(command: str) -> tuple[list[str], list[str]]:
     return (sorted(secrets), sorted(args, key=lambda s: int(s)))
 
 
+def _scan_placeholders_many(
+    commands: list[str],
+) -> tuple[list[str], list[str]]:
+    """多段联合扫描：secret 名去重，arg 索引跨段全局收集。
+
+    语义与 cmdseal.py::do_seal 的跨段全局编号保持一致：比如首段
+    用 {{arg:1}}、二段用 {{arg:2}}，运行时依次传 ``./bin a b`` 即可。
+    """
+    secrets: set[str] = set()
+    args: set[str] = set()
+    for seg in commands:
+        s, a = _scan_placeholders(seg)
+        secrets.update(s)
+        args.update(a)
+    return (sorted(secrets), sorted(args, key=lambda s: int(s)))
+
+
 def _redact_command(command: str) -> str:
     """把 {{secret:*}} 渲染为 ***，用于安全预览。"""
     return PLACEHOLDER_RE.sub(
@@ -74,94 +101,240 @@ def _redact_command(command: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Page 1 — command template
+# Page 1 — command template (v1.2.1：多段管道)
 # ---------------------------------------------------------------------------
 
+class _SegmentEditor(QWidget):
+    """单段命令编辑控件：标题行 + 编辑框 + 行内提示。
+
+    只负责展示和文本解析反馈，“添加 / 删除”由 CommandPage 统一
+    调度。信号 textChanged/removeRequested 向外曝露。
+    """
+
+    textChanged = Signal()
+    removeRequested = Signal(object)  # object=self
+
+    def __init__(self, index: int, can_remove: bool = False) -> None:
+        super().__init__()
+        mono = QFont("Menlo")
+        mono.setStyleHint(QFont.Monospace)
+
+        self._title = QLabel(self._title_text(index))
+        self._title.setStyleSheet("color:#666;")
+
+        self._remove_btn = QPushButton("×")
+        self._remove_btn.setFixedWidth(28)
+        self._remove_btn.setToolTip("删除该段")
+        self._remove_btn.setVisible(can_remove)
+        self._remove_btn.clicked.connect(
+            lambda: self.removeRequested.emit(self))
+
+        head = QHBoxLayout()
+        head.setContentsMargins(0, 0, 0, 0)
+        head.addWidget(self._title, 1)
+        head.addWidget(self._remove_btn)
+
+        self.edit = QPlainTextEdit()
+        self.edit.setTabChangesFocus(True)
+        self.edit.setFont(mono)
+        self.edit.setFixedHeight(72)
+        self.edit.textChanged.connect(self.textChanged)
+
+        self.hint = QLabel("—")
+        self.hint.setWordWrap(True)
+        self.hint.setStyleSheet("color:#666;")
+        self.hint.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        frame = QFrame()
+        frame.setFrameShape(QFrame.StyledPanel)
+        inner = QVBoxLayout(frame)
+        inner.setContentsMargins(8, 6, 8, 6)
+        inner.addLayout(head)
+        inner.addWidget(self.edit)
+        inner.addWidget(self.hint)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(frame)
+
+    @staticmethod
+    def _title_text(index: int) -> str:
+        return f"段 {index + 1}　（第 {index + 1} 段 — 获得上一段 stdout）" \
+            if index > 0 else f"段 {index + 1}　（第一段 — 主命令）"
+
+    def set_index(self, index: int, can_remove: bool) -> None:
+        self._title.setText(self._title_text(index))
+        self._remove_btn.setVisible(can_remove)
+        if index == 0:
+            self.edit.setPlaceholderText(
+                "例如：/usr/bin/zip -j -P {{secret:pw}} {{arg:1}}")
+        else:
+            self.edit.setPlaceholderText(
+                "例如：/usr/bin/zip {{arg:2}} -    （‘-’ 表示读 stdin）")
+
+    def text(self) -> str:
+        return self.edit.toPlainText().strip()
+
+    def set_hint(self, text: str, warn: bool = False) -> None:
+        self.hint.setText(text)
+        self.hint.setStyleSheet(
+            "color:#b84700;" if warn else "color:#666;")
+
+
 class CommandPage(QWizardPage):
-    """第 1 步：命令模板。"""
+    """第 1 步：命令模板（支持多段管道）。"""
 
     def __init__(self) -> None:
         super().__init__()
         self.setTitle("命令模板")
         self.setSubTitle(
-            "填写要密封的命令。\n"
-            "• 可直接写字面量密码（如：zip -j -P mypassword）\n"
-            "• 或使用 {{secret:NAME}}（生成时采集，不暴露给 shell history）\n"
-            "• 使用 {{arg:N}} 表示运行时参数"
+            "填写要密封的命令（可多段管道，最多 "
+            f"{MAX_PIPE_SEGMENTS} 段）。\n"
+            "• 可直接写字面量密码；或用 {{secret:NAME}} / {{arg:N}}\n"
+            "• 多段时，后一段的 stdin 为前一段的 stdout\n"
+            "• {{arg:N}} 编号跨段全局唯一、顺序连续传入"
         )
 
-        self.edit = QPlainTextEdit()
-        self.edit.setPlaceholderText(
-            "例如：zip -j -P mypassword {{arg:1}} {{arg:2}}\n"
-            "或：zhmm-cli --pwd {{secret:master}} -s {{arg:1}}"
-        )
-        self.edit.setTabChangesFocus(True)
-        mono = QFont("Menlo")
-        mono.setStyleHint(QFont.Monospace)
-        self.edit.setFont(mono)
+        # 段容器——用 QScrollArea 容纳任意段数
+        self._segments_host = QWidget()
+        self._segments_layout = QVBoxLayout(self._segments_host)
+        self._segments_layout.setContentsMargins(0, 0, 0, 0)
+        self._segments_layout.setSpacing(8)
+        self._segments_layout.addStretch(1)
 
-        self.hint = QLabel("—")
-        self.hint.setWordWrap(True)
-        self.hint.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        scroll = QScrollArea()
+        scroll.setWidget(self._segments_host)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+
+        self._add_btn = QPushButton("➕  添加管道段")
+        self._add_btn.clicked.connect(lambda: self._add_segment())
+
+        self.summary = QLabel("—")
+        self.summary.setWordWrap(True)
+        self.summary.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         lay = QVBoxLayout(self)
-        lay.addWidget(QLabel("命令（shell 风格，首字段建议绝对路径）："))
-        lay.addWidget(self.edit, 1)
-        lay.addWidget(QLabel("解析结果："))
-        lay.addWidget(self.hint)
+        lay.addWidget(QLabel("命令段（shell 风格，首字段建议绝对路径）："))
+        lay.addWidget(scroll, 1)
+        lay.addWidget(self._add_btn)
+        lay.addWidget(QLabel("全局解析结果："))
+        lay.addWidget(self.summary)
 
-        self.edit.textChanged.connect(self._refresh)
-        # 注意：QPlainTextEdit 没有 plainText 这个 Q_PROPERTY，无法直接
-        # 走 QWizard.registerField 机制；改由 ExecutePage 在需要时显式
-        # 调用 self.command() 读取。
+        self._segments: list[_SegmentEditor] = []
+        self._add_segment()  # 首段初始存在
 
+    # --- 段增/删管理 ---
+    def _add_segment(self) -> None:
+        if len(self._segments) >= MAX_PIPE_SEGMENTS:
+            return
+        seg = _SegmentEditor(index=len(self._segments), can_remove=False)
+        seg.textChanged.connect(self._refresh)
+        seg.removeRequested.connect(self._remove_segment)
+        # 插入到尾部 stretch 前
+        self._segments_layout.insertWidget(
+            self._segments_layout.count() - 1, seg)
+        self._segments.append(seg)
+        self._reindex()
+        self._refresh()
+
+    def _remove_segment(self, seg: _SegmentEditor) -> None:
+        if len(self._segments) <= 1:
+            return  # 首段不允许删
+        self._segments.remove(seg)
+        self._segments_layout.removeWidget(seg)
+        seg.deleteLater()
+        self._reindex()
+        self._refresh()
+
+    def _reindex(self) -> None:
+        can_remove = len(self._segments) > 1
+        for i, seg in enumerate(self._segments):
+            seg.set_index(i, can_remove=can_remove)
+        self._add_btn.setEnabled(len(self._segments) < MAX_PIPE_SEGMENTS)
+
+    # --- 解析与预览 ---
     def _refresh(self) -> None:
-        cmd = self.edit.toPlainText().strip()
-        if not cmd:
-            self.hint.setText("—")
-        else:
+        total_tokens = 0
+        has_error = False
+        for i, seg in enumerate(self._segments):
+            cmd = seg.text()
+            if not cmd:
+                seg.set_hint("—")
+                continue
             try:
                 tokens = shlex.split(cmd)
             except ValueError as e:
-                self.hint.setText(f"⚠ 无法解析 shell 引用：{e}")
-                self.completeChanged.emit()
-                return
-            
-            # 检测首 token 是否为占位符或裸程序名
+                seg.set_hint(f"⚠ 无法解析 shell 引用：{e}", warn=True)
+                has_error = True
+                continue
+            total_tokens += len(tokens)
+
             first_token = tokens[0] if tokens else ""
             path_warning = ""
             if first_token and not first_token.startswith('/'):
                 if first_token.startswith('{{'):
-                    path_warning = "\n⚠ 首 token 是占位符，请确保运行时传入绝对路径"
+                    path_warning = "；⚠ 首 token 是占位符，请确保运行时传入绝对路径"
                 else:
-                    path_warning = f"\nℹ 首 token '{first_token}' 将在封存时解析为绝对路径"
-            
-            secrets, args = _scan_placeholders(cmd)
+                    path_warning = (
+                        f"；ℹ 首 token '{first_token}' 将在封存时解析为绝对路径")
+
+            secs, args = _scan_placeholders(cmd)
             parts = [f"tokens={len(tokens)}"]
-            parts.append(f"secrets={', '.join(secrets) or '(none)'}")
+            parts.append(f"secrets={', '.join(secs) or '(none)'}")
             parts.append(f"args={', '.join(args) or '(none)'}")
-            
-            # 检测裸写 secret:/arg: 但未包 {{}} 的情况
+
             bare_secret = re.search(r'(?<!\{)secret:[A-Za-z0-9_]+(?!\})', cmd)
             bare_arg = re.search(r'(?<!\{)arg:[0-9]+(?!\})', cmd)
             if bare_secret or bare_arg:
-                parts.insert(0, "⚠ 检测到未包裹的 secret:/arg:，请用 {{secret:NAME}} 或 {{arg:N}}")
-            
-            self.hint.setText("  ·  ".join(parts) + path_warning)
+                parts.insert(
+                    0,
+                    "⚠ 检测到未包裹的 secret:/arg:，请用 {{secret:NAME}} 或 {{arg:N}}",
+                )
+                has_error = True
+            seg.set_hint(
+                "  ·  ".join(parts) + path_warning,
+                warn=bool(path_warning and '⚠' in path_warning),
+            )
+
+        # 全局总览：跨段合并 secret / arg
+        cmds = self.commands()
+        if not cmds:
+            self.summary.setText("—")
+        else:
+            all_secrets, all_args = _scan_placeholders_many(cmds)
+            summary_parts = [f"segments={len(cmds)}/{MAX_PIPE_SEGMENTS}"]
+            summary_parts.append(f"total_tokens={total_tokens}")
+            summary_parts.append(
+                f"secrets={', '.join(all_secrets) or '(none)'}")
+            summary_parts.append(
+                f"args={', '.join(all_args) or '(none)'}")
+            self.summary.setText("  ·  ".join(summary_parts))
         self.completeChanged.emit()
 
     def isComplete(self) -> bool:
-        cmd = self.edit.toPlainText().strip()
-        if not cmd:
+        cmds = self.commands()
+        if not cmds:
             return False
-        try:
-            toks = shlex.split(cmd)
-        except ValueError:
+        if len(cmds) > MAX_PIPE_SEGMENTS:
             return False
-        return bool(toks)
+        for cmd in cmds:
+            try:
+                toks = shlex.split(cmd)
+            except ValueError:
+                return False
+            if not toks:
+                return False
+        return True
+
+    def commands(self) -> list[str]:
+        """返回非空段列表；空段自动剔除。"""
+        return [seg.text() for seg in self._segments if seg.text()]
 
     def command(self) -> str:
-        return self.edit.toPlainText().strip()
+        """向后兼容：返回首段（仅日志/预览调试使用）。"""
+        cmds = self.commands()
+        return cmds[0] if cmds else ""
 
 
 # ---------------------------------------------------------------------------
@@ -197,8 +370,9 @@ class SecretsPage(QWizardPage):
         self._inputs.clear()
 
         wiz = self.wizard()
-        cmd = wiz.command_page.command() if isinstance(wiz, SealWizard) else ""
-        names, _ = _scan_placeholders(cmd)
+        cmds = (wiz.command_page.commands()
+                if isinstance(wiz, SealWizard) else [])
+        names, _ = _scan_placeholders_many(cmds)
         self._empty_hint.setVisible(not names)
 
         for name in names:
@@ -231,8 +405,9 @@ class SecretsPage(QWizardPage):
     def nextId(self) -> int:
         # 如果没有 secret，直接跳到 OptionsPage（跳过本页）
         wiz = self.wizard()
-        cmd = wiz.command_page.command() if isinstance(wiz, SealWizard) else ""
-        names, _ = _scan_placeholders(cmd)
+        cmds = (wiz.command_page.commands()
+                if isinstance(wiz, SealWizard) else [])
+        names, _ = _scan_placeholders_many(cmds)
         if not names:
             # OptionsPage 是第 3 页（索引 2）
             return 2
@@ -357,12 +532,15 @@ class ExecutePage(QWizardPage):
         lines = [
             f"argv    : {' '.join(shlex.quote(x) for x in backend.build_argv(req))}",
             f"cwd     : {backend.PROJECT_ROOT}",
-            f"command : {_redact_command(req.command)}",
+        ]
+        for i, seg in enumerate(req.commands):
+            lines.append(f"seg {i + 1:>2} : {_redact_command(seg)}")
+        lines.extend([
             f"output  : {req.output}",
             f"user    : {req.user}",
             f"label   : {req.label or '(auto)'}",
             f"sign    : {'--no-sign' if req.no_sign else req.signing_identity}",
-        ]
+        ])
         self.preview.setPlainText("\n".join(lines))
         self.log.clear()
         self.run_btn.setEnabled(True)
@@ -379,7 +557,7 @@ class ExecutePage(QWizardPage):
         opts: OptionsPage = wiz.options_page
         secrets = wiz.secrets_page.collected_secrets()
         return backend.SealRequest(
-            command=wiz.command_page.command(),
+            commands=wiz.command_page.commands(),
             output=Path(opts.output_edit.text()).expanduser(),
             secrets=secrets,
             signing_identity=opts.signing_identity(),

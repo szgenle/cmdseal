@@ -137,6 +137,19 @@ zhmm-cli --pwd {{secret:master}} -s {{arg:1}}
 openssl enc -aes-256-cbc -k {{secret:key}} -in {{arg:1}} -out {{arg:2}}
 ```
 
+**多段管道（v1.2.1）**：
+
+命令模板页允许点击 **➕ 添加管道段** 下拉出新的编辑框，最多 8 段。
+运行时 runner 会自建 `pipe()` / `fork()` / `dup2()` 将前一段的 stdout
+接到下一段的 stdin，**全程不经过 shell**。
+
+- `{{arg:N}}` 跨段全局编号：首段用 `{{arg:1}}`、二段用 `{{arg:2}}`，
+  运行时依次传递 `./bin a b` 即可。
+- 退出码采用 pipefail 等价语义（**最左失败者胜**）。
+- 页底摘要行会实时显示 `segments=N/8`、跨段总 tokens、合并后的 secret
+  名与全局 arg 集，文稿级地验证你的设计。
+- 首段不可删；其余段在段头点 `×` 删除。空段会被自动剔除后传给 CLI。
+
 **智能警告**：
 
 - ⚠️ 检测到未包裹的 `secret:`/`arg:` → 请用 `{{secret:NAME}}` 或 `{{arg:N}}`

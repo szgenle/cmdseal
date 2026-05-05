@@ -137,6 +137,24 @@ zhmm-cli --pwd {{secret:master}} -s {{arg:1}}
 openssl enc -aes-256-cbc -k {{secret:key}} -in {{arg:1}} -out {{arg:2}}
 ```
 
+**Multi-segment pipeline (v1.2.1)**:
+
+The Command Template page lets you click **➕ Add pipe segment** to reveal
+another editor, up to 8 segments. At runtime the runner wires up
+`pipe()` / `fork()` / `dup2()` itself so stdout of segment N feeds stdin
+of segment N+1 **without ever invoking a shell**.
+
+- `{{arg:N}}` is numbered globally across all segments: put
+  `{{arg:1}}` in segment 1 and `{{arg:2}}` in segment 2, then invoke
+  `./bin a b` at runtime.
+- Exit-code policy is pipefail-equivalent (**left-most failure wins**).
+- The footer summary shows `segments=N/8`, total tokens across all
+  segments, the deduplicated secret names, and the global arg set —
+  a paper-review of your design.
+- The first segment cannot be removed; other segments have a `×`
+  button at their header. Empty segments are dropped automatically
+  before being passed to the CLI.
+
 **Smart warnings**:
 
 - ⚠️ Unwrapped `secret:` / `arg:` detected → use `{{secret:NAME}}` or `{{arg:N}}`.

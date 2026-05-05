@@ -10,6 +10,45 @@ on the `cmdseal` (CLI + runner) surface. The `cmdseal-gui` PySide6
 front-end package in [`pyproject.toml`](./pyproject.toml) carries its
 own independent version number and is not required to stay in lock-step.
 
+## [1.2.1] - Unreleased
+
+GUI companion release for v1.2. Brings the multi-segment pipe
+capability from the CLI to the PySide6 seal wizard so users can
+compose pipelines visually.
+
+### Added
+
+- **Multi-segment editor in the seal wizard.** The *Command* page
+  now hosts a stack of up to 8 pipe-segment editors with a
+  `[+ Add pipe segment]` button and per-segment `[×]` remove.
+  Each segment shows its own token count / secret / arg inspection,
+  while a footer summarises the cross-segment totals (segments,
+  global `{{arg:N}}` set, merged secret names).
+- **Cross-segment secret merging.** `SecretsPage` now scans every
+  segment and deduplicates secret names, preserving the CLI's
+  global semantics.
+- **Per-segment argv preview.** `ExecutePage` renders each pipe
+  segment on its own `seg N :` line with secrets redacted to `***`.
+- **`SealRequest.commands: list[str]`.** `gui/backend.py` now
+  emits one `--command` per segment when building the `cmdseal.py`
+  invocation, matching the CLI's `action="append"` behaviour.
+
+### Security
+
+- No change to the security posture. GUI remains a thin wrapper
+  over `cmdseal.py`; no encryption or dispatch logic is duplicated.
+  The `--command` contract with the CLI is preserved verbatim,
+  so all v1.2 runner-side guarantees (no shell, absolute path,
+  `DYLD_*` stripping, hardened runtime) carry through unchanged.
+
+### Compatibility
+
+- A single-segment wizard session produces the exact same CLI
+  invocation as v1.1.
+- `SealRequest.command` is kept as a read-only compatibility
+  property (returns first segment) to avoid breaking downstream
+  log / preview callers.
+
 ## [1.2.0] - Unreleased
 
 Pipe-support release. Adds multi-segment pipelines to sealed binaries

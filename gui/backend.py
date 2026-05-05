@@ -66,7 +66,9 @@ PROJECT_ROOT, CMDSEAL_PY, PYTHON_EXE = _resolve_runtime()
 
 @dataclass
 class SealRequest:
-    command: str
+    # v1.2：commands 为列表，N==1 等价 v1.1 单段；N>=2 走 runner 自建
+    # 管道。每一段都会以独立 --command 追加给 cmdseal.py CLI。
+    commands: list[str]
     output: Path
     secrets: dict[str, str] = field(default_factory=dict)
     signing_identity: str = "-"
@@ -75,6 +77,14 @@ class SealRequest:
     label: str = ""
     rotate: bool = False
 
+    @property
+    def command(self) -> str:
+        """向后兼容：返回首段，仅供日志/预览拼字串时使用。
+
+        新代码请直接使用 ``commands``。
+        """
+        return self.commands[0] if self.commands else ""
+
 
 def build_argv(req: SealRequest) -> list[str]:
     sub = "rotate" if req.rotate else "seal"
@@ -82,7 +92,11 @@ def build_argv(req: SealRequest) -> list[str]:
         PYTHON_EXE,
         str(CMDSEAL_PY),
         sub,
-        "--command", req.command,
+    ]
+    # v1.2：每段独立 --command；cmdseal.py 已改为 action="append"
+    for seg in req.commands:
+        argv += ["--command", seg]
+    argv += [
         "--output", str(req.output),
         "--signing-identity", req.signing_identity,
         "--secrets-from-stdin",
