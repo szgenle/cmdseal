@@ -477,24 +477,70 @@ ZIP 加密           cmdseal.d4e5f6.K                 zip -j -P {{secret:zippw}}
 
 ### 4.4 edit-template - 修改模板
 
-**用途**：CLI 方式的模板修改（等同于 GUI 的"修改模板…"）
+**用途**：CLI 方式的模板修改（等同于 GUI 的“修改模板…”）。
+就地重写 sealed binary 的命令模板，同时轮换 keychain 密钥 `K`；
+保留原有的 label、输出路径、secret 名集合不变。
 
 ```bash
-python3 cmdseal.py edit-template ./seal_zip --new-command 'NEW_COMMAND'
+python3 cmdseal.py edit-template \
+    --service cmdseal.<12hex>.K \
+    --command 'NEW_COMMAND'
 ```
 
-**参数**：
+**必填参数**：
 
-| 参数 | 必填 | 说明 |
-|------|------|------|
-| `BINARY` | ✅ | 要修改的二进制路径 |
-| `--new-command` | ✅ | 新命令模板 |
+| 参数 | 说明 |
+|------|------|
+| `--service` | 要修改的 runner 的 keychain 服务名。可用 `cmdseal.py list` 查出。 |
+| `--command` | 新命令模板。可多次传入组成管道（最多 8 段，语义与 `seal` 一致）。 |
 
-**示例**：
+**可选参数**：
+
+| 参数 | 说明 |
+|------|------|
+| `--user` | keychain 账户名（默认：`$USER`；如定位到旧 item，会自动覆盖为旧账户名）。 |
+| `--secrets-from-stdin` | 从 stdin 读 `NAME=VALUE` 行（供脚本 / GUI 前端使用）。 |
+| `--template`、`--no-sign`、`--signing-identity`、`--keep-source` | 含义与 `seal` 完全相同。 |
+
+**约束**：
+
+- 新模板的 `{{secret:NAME}}` 集合**必须与原始集合完全一致**。
+  如需增减 secret，请删除后重新 seal（AEAD 不可逆，旧 secret
+  值无法被重新绑定到不同的名字集合）。
+- Legacy 条目（无 `kSecAttrComment` 元数据的旧版本 runner）会被
+  拒绝，必须先删除再用 `cmdseal seal` 重建。
+
+**执行后效果**：
+
+- 保留的 `output_path` 处的磁盘 binary 被覆写。
+- 新的 `K`（以及新的 keychain 服务名）取代旧的。会与 `rotate`
+  一样，重编译后的 binary 首次运行会弹一次 macOS 混合授权窗
+  （新 cdhash → 新 partition-list）。
+
+**示例** — 最简形式：
 
 ```bash
-python3 cmdseal.py edit-template ./seal_zip \
-    --new-command 'zip -j -P {{secret:newzippw}} {{arg:1}} {{arg:2}}'
+python3 cmdseal.py edit-template \
+    --service cmdseal.1e742ffc7243.K \
+    --command '/bin/echo world'
+```
+
+**示例** — 带 secret（经 stdin）：
+
+```bash
+printf 'newzippw=s3cret\n' | python3 cmdseal.py edit-template \
+    --service cmdseal.ab12cd34ef56.K \
+    --command 'zip -j -P {{secret:newzippw}} {{arg:1}} {{arg:2}}' \
+    --secrets-from-stdin
+```
+
+**示例** — 改成多段管道 runner：
+
+```bash
+python3 cmdseal.py edit-template \
+    --service cmdseal.ab12cd34ef56.K \
+    --command '/bin/echo hello' \
+    --command '/usr/bin/tr a-z A-Z'
 ```
 
 ---
@@ -884,8 +930,8 @@ python3 cmdseal.py rotate BINARY
 # 列出 runner
 python3 cmdseal.py list [--json]
 
-# 修改模板
-python3 cmdseal.py edit-template BINARY --new-command CMD
+# 修改模板（详见 §4.4）
+python3 cmdseal.py edit-template --service SERVICE --command CMD
 
 # 构建 GUI
 make app

@@ -484,23 +484,72 @@ ZIP encryption     cmdseal.d4e5f6.K                 zip -j -P {{secret:zippw}} {
 ### 4.4 edit-template — Edit Template
 
 **Purpose**: CLI equivalent of the GUI “Edit template…” action.
+Rewrites the sealed binary in place with a new command template,
+rotates the keychain key `K`, and preserves the runner's label,
+output path and secret-name set.
 
 ```bash
-python3 cmdseal.py edit-template ./seal_zip --new-command 'NEW_COMMAND'
+python3 cmdseal.py edit-template \
+    --service cmdseal.<12hex>.K \
+    --command 'NEW_COMMAND'
 ```
 
-**Parameters**:
+**Required parameters**:
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `BINARY` | ✅ | Path of the binary to edit. |
-| `--new-command` | ✅ | New command template. |
+| Parameter | Description |
+|-----------|-------------|
+| `--service` | Keychain service name of the runner to edit. Find it via `cmdseal.py list`. |
+| `--command` | New command template. Pass multiple times to form a pipeline (max 8 segments, same semantics as `seal`). |
 
-**Example**:
+**Optional parameters**:
+
+| Parameter | Description |
+|-----------|-------------|
+| `--user` | Keychain account name (default: `$USER`; auto-overridden by the old item's account when found). |
+| `--secrets-from-stdin` | Read `NAME=VALUE` lines from stdin (for scripting / GUI front-ends). |
+| `--template`, `--no-sign`, `--signing-identity`, `--keep-source` | Same meaning as in `seal`. |
+
+**Constraints**:
+
+- The new template's `{{secret:NAME}}` set **must equal** the original
+  set. To add or remove secrets, delete and re-seal instead (AEAD is
+  non-reversible, so old secret values cannot be re-applied to a
+  different set of names).
+- Legacy items (those without `kSecAttrComment` metadata) are rejected.
+  They must be deleted and re-created via `cmdseal seal`.
+
+**Post-conditions**:
+
+- The on-disk binary at the preserved `output_path` is overwritten.
+- A fresh `K` (and therefore a fresh keychain service name) replaces
+  the old one. The first run of the rebuilt binary will trigger one
+  macOS mixed-authorization dialog (new cdhash → new partition list),
+  same as `rotate`.
+
+**Example** — simple one-liner:
 
 ```bash
-python3 cmdseal.py edit-template ./seal_zip \
-    --new-command 'zip -j -P {{secret:newzippw}} {{arg:1}} {{arg:2}}'
+python3 cmdseal.py edit-template \
+    --service cmdseal.1e742ffc7243.K \
+    --command '/bin/echo world'
+```
+
+**Example** — with secrets (via stdin):
+
+```bash
+printf 'newzippw=s3cret\n' | python3 cmdseal.py edit-template \
+    --service cmdseal.ab12cd34ef56.K \
+    --command 'zip -j -P {{secret:newzippw}} {{arg:1}} {{arg:2}}' \
+    --secrets-from-stdin
+```
+
+**Example** — change a pipeline runner:
+
+```bash
+python3 cmdseal.py edit-template \
+    --service cmdseal.ab12cd34ef56.K \
+    --command '/bin/echo hello' \
+    --command '/usr/bin/tr a-z A-Z'
 ```
 
 ---
@@ -890,8 +939,8 @@ python3 cmdseal.py rotate BINARY
 # List runners
 python3 cmdseal.py list [--json]
 
-# Edit template
-python3 cmdseal.py edit-template BINARY --new-command CMD
+# Edit template (see §4.4 for details)
+python3 cmdseal.py edit-template --service SERVICE --command CMD
 
 # Build the GUI
 make app

@@ -49,6 +49,27 @@ compose pipelines visually.
   final step of the novice-mode wizard. Now it calls
   `commands=param_page.templates()` and round-trips through the
   multi-segment path.
+- **`cmdseal.py edit-template` subcommand now actually exists.**
+  Both the Runner Management window's right-click “Edit template…”
+  action and [`gui/backend.py::edit_template`](./gui/backend.py)
+  were invoking `python3 cmdseal.py edit-template …`, but the CLI
+  only declared `seal / rotate / list / delete` subparsers. Worse,
+  the back-compat shim in `parse_args` silently rewrote unknown
+  first-tokens as `seal` arguments, producing a misleading
+  “`seal`: the following arguments are required: --output” error
+  instead of an “invalid choice”. Fix:
+    - Added `do_edit_template(args)` that locates the old item by
+      `--service`, reads the preserved fields (`output_path`, `label`,
+      `account`, `secret_names`) from its `kSecAttrComment` metadata,
+      enforces that the new template's `{{secret:NAME}}` set equals
+      the old set, then delegates to `do_seal(old_service_to_delete=…)`
+      for a single atomic “new K → recompile → re-sign → swap keychain
+      item” flow.
+    - Legacy items (no comment metadata) are rejected with a
+      deterministic error message.
+    - The shim whitelist was extended with `"edit-template"` so
+      future typos surface as `argparse: invalid choice` rather
+      than being absorbed into `seal`.
 
 ### Security
 

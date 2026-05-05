@@ -42,6 +42,22 @@ v1.2 的 GUI 配套版本。将 CLI 端已具备的多段管道能力带到
   仍然在以 `command=` 关键字传参，导致简化模式向导最后
   一步抛 `TypeError`。现改为 `commands=param_page.templates()`，
   走多段路径重新对齐。
+- **`cmdseal.py edit-template` 子命令真正落地**。Runner 管理窗口的
+  右键“修改模板…”与 [`gui/backend.py::edit_template`](./gui/backend.py)
+  一直在调用 `python3 cmdseal.py edit-template …`，但 CLI 只声明了
+  `seal / rotate / list / delete` 四个子命令。更隐蔽的是，
+  `parse_args` 的向后兼容 shim 会把未识别的首 token 默默改写为
+  `seal` 的参数，产生“`seal`: the following arguments are required:
+  --output”这样的误导性报错，而非“invalid choice”。本次修复：
+    - 新增 `do_edit_template(args)`：按 `--service` 定位旧 item，
+      从其 `kSecAttrComment` 元数据读出 `output_path / label /
+      account / secret_names`；强制新模板的 `{{secret:NAME}}` 集合
+      与旧集合一致；然后委托 `do_seal(old_service_to_delete=…)`
+      完成一次原子的“生成新 K → 重编译 → 重签名 → 替换 keychain
+      item”流程。
+    - Legacy 条目（无 comment 元数据）直接按确定性错误信息拒绝。
+    - shim 白名单补上 `"edit-template"`，未来任何拼写错误会触发
+      `argparse: invalid choice`，而不是被吞入 `seal` 解析。
 
 ### 安全
 
