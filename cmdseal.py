@@ -78,6 +78,60 @@ MAX_PIPE_SEGMENTS = 8
 # Helpers
 # ----------------------------------------------------------------------
 
+def mask_template(template):
+    """Safely mask a command template for display.
+
+    Rules (authoritative spec lives in tests/test_mask_template.py):
+      1. First token (command name) is preserved verbatim.
+      2. Tokens containing a ``{{arg:N}}`` / ``{{secret:NAME}}``
+         placeholder are preserved verbatim.
+      3. GNU long flags (``--``):
+           * with ``=`` -> ``--key=***``
+           * without ``=`` -> preserved
+      4. POSIX short flags (``-``):
+           * exactly two chars (``-p``) -> preserved
+           * longer (``-pPass``, ``-xzvf``) -> first two chars + ``***``
+      5. Any other bare token (including absolute paths) -> ``***``.
+
+    Fallback: if shlex cannot parse the string (unclosed quote), we fall
+    back to whitespace split but still mask every non-placeholder /
+    non-flag token, so raw values never leak through.
+    """
+    if template is None:
+        return ""
+    s = template
+    if not s.strip():
+        return s
+    try:
+        tokens = shlex.split(s, posix=True)
+    except ValueError:
+        tokens = s.split()
+
+    out = []
+    for i, tok in enumerate(tokens):
+        if i == 0:
+            out.append(tok)
+            continue
+        if PLACEHOLDER_RE.search(tok):
+            out.append(tok)
+            continue
+        if tok.startswith("--"):
+            if "=" in tok:
+                key, _ = tok.split("=", 1)
+                out.append(f"{key}=***")
+            else:
+                out.append(tok)
+            continue
+        if tok.startswith("-") and len(tok) >= 2:
+            if len(tok) == 2:
+                out.append(tok)
+            else:
+                out.append(tok[:2] + "***")
+            continue
+        out.append("***")
+    return " ".join(out)
+
+
 def run(cmd, *, check=True, capture=False, input_bytes=None, input_text=None):
     """Small wrapper around subprocess for clearer errors."""
     try:
