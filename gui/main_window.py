@@ -46,21 +46,23 @@ class MainWindow(QMainWindow):
         title.setFont(f)
 
         subtitle = QLabel(
-            "把一条命令密封进 AEAD 加密的二进制；\n"
-            "密钥只存在于 keychain，且仅允许该二进制读取。"
+            self.tr(
+                "Seal a command into an AEAD-encrypted binary;\n"
+                "the key lives only in the keychain and is bound to this binary."
+            )
         )
         subtitle.setAlignment(Qt.AlignCenter)
         subtitle.setWordWrap(True)
 
-        self.btn_template = QPushButton("从命令生成模板...")
+        self.btn_template = QPushButton(self.tr("Generate from Command…"))
         self.btn_template.setMinimumHeight(40)
         self.btn_template.clicked.connect(self._open_template_wizard)
 
-        self.btn_seal = QPushButton("高级模式...")
+        self.btn_seal = QPushButton(self.tr("Advanced Mode…"))
         self.btn_seal.setMinimumHeight(40)
         self.btn_seal.clicked.connect(self._open_seal_wizard)
 
-        self.btn_manage = QPushButton("管理 runner...")
+        self.btn_manage = QPushButton(self.tr("Manage Runners…"))
         self.btn_manage.setMinimumHeight(40)
         self.btn_manage.clicked.connect(self._open_runner_list)
 
@@ -136,7 +138,7 @@ class MainWindow(QMainWindow):
         mb = self.menuBar()
         app_menu = mb.addMenu("cmdseal")
 
-        prefs_action = QAction("偏好设置…", self)
+        prefs_action = QAction(self.tr("Preferences…"), self)
         # 显式指定 PreferencesRole：确保被搬到 macOS 应用菜单的正确位置
         prefs_action.setMenuRole(QAction.PreferencesRole)
         prefs_action.setShortcut(QKeySequence.Preferences)

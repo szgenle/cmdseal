@@ -65,6 +65,26 @@ rc=app.exec(); \
 print('smoke: exit=', rc, 'backend_ok=', backend.CMDSEAL_PY.is_file())"
 
 # ---------------------------------------------------------------------------
+# 国际化（i18n）
+#   UI 字符串以英文为 source；.qm 翻到 zh_CN。
+#   代码里新增/改动 self.tr("...") 后：
+#     1. make i18n-update   # 扫出最新 source 到 .ts（保留已填翻译）
+#     2. 手工编辑 gui/translations/cmdseal_zh_CN.ts 填 <translation>
+#     3. make i18n-release   # 编译 .qm
+# ---------------------------------------------------------------------------
+.PHONY: i18n-update i18n-release
+I18N_TS := gui/translations/cmdseal_zh_CN.ts
+I18N_QM := gui/translations/cmdseal_zh_CN.qm
+I18N_SRC := gui/main_window.py gui/runner_list.py gui/preferences.py
+
+i18n-update: ## 从源码扫出最新 UI 字符串到 .ts
+	@mkdir -p gui/translations
+	$(UV) run pyside6-lupdate $(I18N_SRC) -ts $(I18N_TS)
+
+i18n-release: ## 编译 .ts -> .qm（GUI 运行时加载）
+	$(UV) run pyside6-lrelease $(I18N_TS) -qm $(I18N_QM)
+
+# ---------------------------------------------------------------------------
 # C helper（供 cmdseal.py 调用；日常无需手动）
 # ---------------------------------------------------------------------------
 .PHONY: helper
@@ -89,6 +109,7 @@ app: sync-pkg ## 打包 .app（需 packaging 依赖）
 		--add-data cmdseal.py:assets \
 		--add-data cmdseal_helper.c:assets \
 		--add-data runner_aead_template.c:assets \
+		--add-data gui/translations/cmdseal_zh_CN.qm:gui/translations \
 		run_gui.py
 
 # ---------------------------------------------------------------------------

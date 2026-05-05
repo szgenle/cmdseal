@@ -135,13 +135,13 @@ class RunnerListWindow(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         # 独立顶层窗口：传 parent 只为 Qt 对象树回收，不做 modal
         super().__init__(parent, Qt.Window)
-        self.setWindowTitle("cmdseal · 已 seal 的 runner")
+        self.setWindowTitle(self.tr("cmdseal · Sealed Runners"))
         self.resize(820, 420)
 
         self._status = QLabel("—")
         self._status.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
-        self._btn_refresh = QPushButton("刷新")
+        self._btn_refresh = QPushButton(self.tr("Refresh"))
         self._btn_refresh.clicked.connect(self.refresh)
 
         top = QHBoxLayout()
@@ -149,7 +149,12 @@ class RunnerListWindow(QWidget):
         top.addWidget(self._btn_refresh, 0)
 
         self._table = QTableWidget(0, len(_COLS), self)
-        self._table.setHorizontalHeaderLabels(_COLS)
+        self._table.setHorizontalHeaderLabels([
+            self.tr("Label"),
+            self.tr("Service"),
+            self.tr("Template"),
+            self.tr("Created"),
+        ])
         self._table.verticalHeader().setVisible(False)
         self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -166,7 +171,7 @@ class RunnerListWindow(QWidget):
         hh.setSectionResizeMode(2, QHeaderView.Stretch)            # Template
         hh.setSectionResizeMode(3, QHeaderView.ResizeToContents)   # Created
 
-        self._btn_close = QPushButton("关闭")
+        self._btn_close = QPushButton(self.tr("Close"))
         self._btn_close.clicked.connect(self.close)
 
         bottom = QHBoxLayout()
@@ -185,33 +190,36 @@ class RunnerListWindow(QWidget):
 
     def refresh(self) -> None:
         """重新从 keychain 拉取并填表。subprocess 同步调用，~10ms 级。"""
-        self._status.setText("加载中…")
+        self._status.setText(self.tr("Loading…"))
         self._btn_refresh.setEnabled(False)
         try:
             items = list_sealed()
         except FileNotFoundError as e:
             self._btn_refresh.setEnabled(True)
-            self._status.setText("加载失败")
+            self._status.setText(self.tr("Load failed"))
             QMessageBox.critical(self, "cmdseal", str(e))
             return
         except subprocess.CalledProcessError as e:
             self._btn_refresh.setEnabled(True)
-            self._status.setText("加载失败")
+            self._status.setText(self.tr("Load failed"))
             QMessageBox.critical(
                 self, "cmdseal",
-                f"cmdseal.py list 失败（rc={e.returncode}）\n\n{e.stderr or ''}")
+                self.tr("cmdseal.py list failed (rc={rc})\n\n{err}").format(
+                    rc=e.returncode, err=e.stderr or ""))
             return
         except Exception as e:  # noqa: BLE001 — UI 兜底
             self._btn_refresh.setEnabled(True)
-            self._status.setText("加载失败")
-            QMessageBox.critical(self, "cmdseal", f"意外错误：{e}")
+            self._status.setText(self.tr("Load failed"))
+            QMessageBox.critical(self, "cmdseal",
+                                 self.tr("Unexpected error: {e}").format(e=e))
             return
 
         self._populate(items)
         n = len(items)
         legacy = sum(1 for it in items if not it.get("_meta"))
         self._status.setText(
-            f"共 {n} 条 · {n - legacy} 条带元数据 · {legacy} 条 legacy"
+            self.tr("{n} total · {ok} with metadata · {legacy} legacy").format(
+                n=n, ok=n - legacy, legacy=legacy)
         )
         self._btn_refresh.setEnabled(True)
 
@@ -232,8 +240,8 @@ class RunnerListWindow(QWidget):
                 label = str(meta.get("label") or "—")
                 template = _mask_template(str(meta.get("template") or ""))
             else:
-                label = "(legacy)"
-                template = "(legacy, metadata unknown)"
+                label = self.tr("(legacy)")
+                template = self.tr("(legacy, metadata unknown)")
 
             created_short, created_full = _format_created(
                 meta, it.get("created"))
@@ -264,7 +272,7 @@ class RunnerListWindow(QWidget):
 
         menu = QMenu(self._table)
 
-        act_delete = QAction("删除…", self._table)
+        act_delete = QAction(self.tr("Delete…"), self._table)
         act_delete.triggered.connect(
             lambda _=False, d=data: self._confirm_delete(d))
         menu.addAction(act_delete)
@@ -277,7 +285,7 @@ class RunnerListWindow(QWidget):
         svc = str(item.get("service") or "?")
         acct = str(item.get("account") or "")
         meta = item.get("_meta") or {}
-        label = str(meta.get("label") or "(legacy)")
+        label = str(meta.get("label") or self.tr("(legacy)"))
         out = str(meta.get("output_path") or "")
 
         # 决定磁盘文件联动删除的状态
@@ -291,44 +299,46 @@ class RunnerListWindow(QWidget):
             binary_exists = binary_path.is_file()
 
         msg = (
-            f"确认删除 runner 「{label}」？\n\n"
-            f"service : {svc}\n"
-            f"account : {acct or '—'}\n"
+            self.tr("Delete runner “{label}”?\n\n").format(label=label)
+            + self.tr("service : {svc}\n").format(svc=svc)
+            + self.tr("account : {acct}\n").format(acct=acct or "—")
         )
         if out:
-            msg += f"binary  : {out}\n"
+            msg += self.tr("binary  : {out}\n").format(out=out)
 
         if binary_exists:
-            action_summary = (
-                "\n将执行以下操作（不可恢复）：\n"
-                "① 删除钥匙串中的 K（密文将无法再被解密）\n"
-                "② 同步删除磁盘上的 sealed binary 文件\n"
-                "\n此操作不触发系统授权弹窗。"
-                "若文件删除失败（如权限不足），会提示但 K 已删除无法回滚。"
+            action_summary = self.tr(
+                "\nThe following actions will run (not reversible):\n"
+                "① Remove K from the keychain (ciphertext becomes undecryptable)\n"
+                "② Also delete the sealed binary file from disk\n"
+                "\nNo system authorization prompt will appear."
+                "If the file cannot be removed (e.g. permissions), we will warn;"
+                " K is already deleted and cannot be rolled back."
             )
         elif binary_path is not None:
-            action_summary = (
-                "\n将执行以下操作（不可恢复）：\n"
-                "① 删除钥匙串中的 K\n"
-                "② binary 文件已不在磁盘上（无需清理）\n"
-                "\n此操作不触发系统授权弹窗。"
+            action_summary = self.tr(
+                "\nThe following actions will run (not reversible):\n"
+                "① Remove K from the keychain\n"
+                "② The binary file is already gone from disk (no cleanup needed)\n"
+                "\nNo system authorization prompt will appear."
             )
         else:
-            action_summary = (
-                "\n将执行以下操作（不可恢复）：\n"
-                "① 删除钥匙串中的 K\n"
-                "⚠️ legacy runner 没有 output_path 元数据，无法联动删除磁盘上\n"
-                "   对应的 sealed binary。若还知道位置，请手动清理。\n"
-                "\n此操作不触发系统授权弹窗。"
+            action_summary = self.tr(
+                "\nThe following actions will run (not reversible):\n"
+                "① Remove K from the keychain\n"
+                "⚠️ Legacy runner without output_path metadata; we cannot\n"
+                "   automatically delete the sealed binary. If you still know\n"
+                "   its location, please remove it manually.\n"
+                "\nNo system authorization prompt will appear."
             )
         msg += action_summary
 
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Warning)
-        box.setWindowTitle("删除 runner")
+        box.setWindowTitle(self.tr("Delete Runner"))
         box.setText(msg)
-        btn_del = box.addButton("删除", QMessageBox.DestructiveRole)
-        box.addButton("取消", QMessageBox.RejectRole)
+        btn_del = box.addButton(self.tr("Delete"), QMessageBox.DestructiveRole)
+        box.addButton(self.tr("Cancel"), QMessageBox.RejectRole)
         box.setDefaultButton(btn_del)
         box.exec()
         if box.clickedButton() is not btn_del:
@@ -340,10 +350,12 @@ class RunnerListWindow(QWidget):
         except subprocess.CalledProcessError as e:
             QMessageBox.critical(
                 self, "cmdseal",
-                f"删除失败（rc={e.returncode}）\n\n{e.stderr or ''}")
+                self.tr("Delete failed (rc={rc})\n\n{err}").format(
+                    rc=e.returncode, err=e.stderr or ""))
             return
         except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, "cmdseal", f"意外错误：{e}")
+            QMessageBox.critical(self, "cmdseal",
+                                 self.tr("Unexpected error: {e}").format(e=e))
             return
 
         # --- 步骤②：联动删磁盘 binary（失败不回滚，只提示）---
@@ -353,8 +365,10 @@ class RunnerListWindow(QWidget):
             except OSError as e:
                 QMessageBox.warning(
                     self, "cmdseal",
-                    f"K 已删除，但磁盘文件删除失败：\n"
-                    f"{binary_path}\n\n{e}\n\n"
-                    f"请手动删除该文件（已不能再解密运行）。")
+                    self.tr(
+                        "K was deleted but removing the binary failed:\n"
+                        "{path}\n\n{err}\n\n"
+                        "Please delete this file manually (it can no longer be run)."
+                    ).format(path=binary_path, err=e))
 
         self.refresh()

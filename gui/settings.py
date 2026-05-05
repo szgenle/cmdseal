@@ -32,6 +32,10 @@ K_OUTPUT_DIR = "template_wizard/output_dir"
 K_NAME_PREFIX = "template_wizard/name_prefix"
 K_TIMEOUT_SEC = "template_wizard/try_run_timeout_sec"
 
+#: UI language preference (``auto`` / ``en`` / ``zh_CN``). Effective at next launch.
+K_LANGUAGE = "app/language"
+_DEFAULT_LANGUAGE = "auto"
+
 
 class TemplatePrefs(NamedTuple):
     """TemplateWizard 使用的偏好快照；不可变，读一次用完即丢。"""
@@ -105,3 +109,19 @@ def default_template_prefs() -> TemplatePrefs:
         name_prefix=_DEFAULT_NAME_PREFIX,
         try_run_timeout_ms=_DEFAULT_TIMEOUT_SEC * 1000,
     )
+
+
+# -------- UI language ---------------------------------------------------
+
+def load_language() -> str:
+    """Return the UI language code (``auto``/``en``/``zh_CN``). Defaults to ``auto``."""
+    s = QSettings()
+    code = str(s.value(K_LANGUAGE, _DEFAULT_LANGUAGE) or _DEFAULT_LANGUAGE)
+    return code
+
+
+def save_language(code: str) -> None:
+    """Persist the UI language code. Takes effect on next GUI launch."""
+    s = QSettings()
+    s.setValue(K_LANGUAGE, code or _DEFAULT_LANGUAGE)
+    s.sync()

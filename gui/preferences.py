@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -30,6 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import settings
+from .i18n import SUPPORTED_LANGUAGES
 
 
 class PreferencesDialog(QDialog):
@@ -37,17 +39,18 @@ class PreferencesDialog(QDialog):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("设置")
+        self.setWindowTitle(self.tr("Preferences"))
         self.setModal(True)
-        self.resize(520, 260)
+        self.resize(520, 300)
 
         prefs = settings.load_template_prefs()
         defaults = settings.default_template_prefs()
+        self._initial_language = settings.load_language()
 
         # --- 输出目录 ---
         self.output_edit = QLineEdit(str(prefs.output_dir))
         self.output_edit.setPlaceholderText(str(defaults.output_dir))
-        browse_btn = QPushButton("浏览…")
+        browse_btn = QPushButton(self.tr("Browse…"))
         browse_btn.clicked.connect(self._on_browse)
         output_row = QWidget()
         out_lay = QHBoxLayout(output_row)
@@ -62,17 +65,31 @@ class PreferencesDialog(QDialog):
         # --- 试运行超时 ---
         self.timeout_spin = QSpinBox()
         self.timeout_spin.setRange(1, 300)
-        self.timeout_spin.setSuffix(" 秒")
+        self.timeout_spin.setSuffix(self.tr(" s"))
         self.timeout_spin.setValue(prefs.try_run_timeout_ms // 1000)
 
+        # --- 界面语言 ---
+        self.language_combo = QComboBox()
+        for code, label_text in SUPPORTED_LANGUAGES:
+            self.language_combo.addItem(label_text, code)
+        # 选中当前已保存的语言（没命中则留在首项，即 auto）
+        for i in range(self.language_combo.count()):
+            if self.language_combo.itemData(i) == self._initial_language:
+                self.language_combo.setCurrentIndex(i)
+                break
+
         form = QFormLayout()
-        form.addRow("默认输出目录：", output_row)
-        form.addRow("文件名前缀：", self.prefix_edit)
-        form.addRow("试运行超时：", self.timeout_spin)
+        form.addRow(self.tr("Default output directory:"), output_row)
+        form.addRow(self.tr("File-name prefix:"), self.prefix_edit)
+        form.addRow(self.tr("Try-run timeout:"), self.timeout_spin)
+        form.addRow(self.tr("Language:"), self.language_combo)
 
         hint = QLabel(
-            "这些默认值在下一次打开「从命令生成模板」向导时生效。\n"
-            "向导内仍可以临时改写，不影响此处的全局默认。"
+            self.tr(
+                "These defaults take effect the next time you open the “Generate from Command” wizard. "
+                "The wizard itself can still override them temporarily without changing the global defaults.\n"
+                "Language changes take effect after restarting the app."
+            )
         )
         hint.setWordWrap(True)
         # 深色模式 #888 对比度够；显式 transparent 防继承父容器背景
@@ -101,7 +118,7 @@ class PreferencesDialog(QDialog):
         if not cur:
             cur = str(settings.default_template_prefs().output_dir)
         chosen = QFileDialog.getExistingDirectory(
-            self, "选择默认输出目录", cur
+            self, self.tr("Choose default output directory"), cur
         )
         if chosen:
             self.output_edit.setText(chosen)
@@ -109,8 +126,8 @@ class PreferencesDialog(QDialog):
     def _on_reset(self) -> None:
         ret = QMessageBox.question(
             self,
-            "恢复默认",
-            "确定要把这三项设置都恢复为默认值吗？",
+            self.tr("Restore Defaults"),
+            self.tr("Restore all four settings to their defaults?"),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -120,6 +137,11 @@ class PreferencesDialog(QDialog):
         self.output_edit.setText(str(p.output_dir))
         self.prefix_edit.setText(p.name_prefix)
         self.timeout_spin.setValue(p.try_run_timeout_ms // 1000)
+        # 语言一并回默认值 auto
+        for i in range(self.language_combo.count()):
+            if self.language_combo.itemData(i) == "auto":
+                self.language_combo.setCurrentIndex(i)
+                break
 
     def _on_accept(self) -> None:
         output_dir = self.output_edit.text().strip()
@@ -127,17 +149,20 @@ class PreferencesDialog(QDialog):
         timeout_sec = self.timeout_spin.value()
 
         if not output_dir:
-            QMessageBox.warning(self, "无效", "默认输出目录不能为空")
+            QMessageBox.warning(self, self.tr("Invalid"),
+                                self.tr("Default output directory cannot be empty."))
             return
         # 前缀为空也放行没意义：用户会发现默认文件名直接变原命令名，
         # 放 PATH 里会遮蔽系统同名命令 —— 明确拒绝
         if not prefix:
-            QMessageBox.warning(self, "无效", "文件名前缀不能为空")
+            QMessageBox.warning(self, self.tr("Invalid"),
+                                self.tr("File-name prefix cannot be empty."))
             return
         # 文件名前缀禁止路径分隔符，避免拼出非法路径
         if "/" in prefix or "\\" in prefix:
             QMessageBox.warning(
-                self, "无效", "文件名前缀不能包含 / 或 \\"
+                self, self.tr("Invalid"),
+                self.tr("File-name prefix cannot contain / or \\.")
             )
             return
 
@@ -146,7 +171,8 @@ class PreferencesDialog(QDialog):
         try:
             Path(output_dir).expanduser()
         except Exception as e:  # noqa: BLE001 — 任意解析异常都拒绝
-            QMessageBox.warning(self, "无效", f"目录路径解析失败：{e}")
+            QMessageBox.warning(self, self.tr("Invalid"),
+                                self.tr("Failed to parse directory: {e}").format(e=e))
             return
 
         settings.save_template_prefs(
@@ -154,4 +180,17 @@ class PreferencesDialog(QDialog):
             name_prefix=prefix,
             try_run_timeout_sec=timeout_sec,
         )
+
+        # 语言有变化：补存并提示重启后生效
+        new_language = self.language_combo.currentData() or "auto"
+        if new_language != self._initial_language:
+            settings.save_language(new_language)
+            QMessageBox.information(
+                self,
+                self.tr("Language Changed"),
+                self.tr(
+                    "The UI language preference has been saved.\n"
+                    "It will take effect after you restart the app."
+                ),
+            )
         self.accept()
