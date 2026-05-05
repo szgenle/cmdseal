@@ -38,7 +38,7 @@
 如果你喜欢图形界面：
 
 ```bash
-git clone https://codeup.aliyun.com/szgenle/cmdseal.git
+git clone https://github.com/szgenle/cmdseal.git
 cd cmdseal
 
 make sync            # 在本地 uv 虚拟环境中安装 PySide6
@@ -219,7 +219,7 @@ strings ./seal_zip | grep cmdseal
 3. 如果你想要 GUI 可以 `make app`，或者直接使用 `cmdseal.py` 进行脚本编写。
 
 如果你想要在 GitHub 上提供 Developer-ID 签名并公证的 `.app` 发布版本，
-[开启一个 issue](https://codeup.aliyun.com/szgenle/cmdseal/issues) —
+[开启一个 issue](https://github.com/szgenle/cmdseal/issues) —
 这取决于维护者加入 Apple Developer Program。
 
 ## 已知限制

@@ -43,7 +43,7 @@ ever seeing the master password.
 If you prefer clicking:
 
 ```bash
-git clone https://codeup.aliyun.com/szgenle/cmdseal.git
+git clone https://github.com/szgenle/cmdseal.git
 cd cmdseal
 
 make sync            # install PySide6 into a local uv venv
@@ -234,7 +234,7 @@ someone else's machine would be useless to you anyway. To use
    scripting.
 
 If you want Developer-ID-signed notarized `.app` releases on GitHub,
-[open an issue](https://codeup.aliyun.com/szgenle/cmdseal/issues) —
+[open an issue](https://github.com/szgenle/cmdseal/issues) —
 it is gated on the maintainer joining the Apple Developer Program.
 
 ## Known limitations
