@@ -1,351 +1,351 @@
-# cmdseal 使用指南
+# cmdseal User Guide
 
-> **面向用户的完整操作手册** —— 从入门到高级用法
-
----
-
-## 目录
-
-- [1. 快速开始](#1-快速开始)
-  - [1.1 GUI 用户（推荐）](#11-gui-用户推荐)
-  - [1.2 CLI 用户（高级）](#12-cli-用户高级)
-- [2. GUI 封存向导详解](#2-gui-封存向导详解)
-  - [2.1 启动向导](#21-启动向导)
-  - [2.2 第一步：命令模板](#22-第一步命令模板)
-  - [2.3 第二步：Secret 采集](#23-第二步secret-采集)
-  - [2.4 第三步：选项配置](#24-第三步选项配置)
-  - [2.5 第四步：执行与预览](#25-第四步执行与预览)
-  - [2.6 从命令生成模板（简化入口）](#26-从命令生成模板简化入口)
-- [3. Runner 管理](#3-runner-管理)
-  - [3.1 查看 Runner 列表](#31-查看-runner-列表)
-  - [3.2 修改模板（密钥轮换）](#32-修改模板密钥轮换)
-  - [3.3 删除 Runner](#33-删除-runner)
-- [4. CLI 命令参考](#4-cli-命令参考)
-  - [4.1 seal - 封存命令](#41-seal---封存命令)
-  - [4.2 rotate - 轮换密钥](#42-rotate---轮换密钥)
-  - [4.3 list - 列出 Runner](#43-list---列出-runner)
-  - [4.4 edit-template - 修改模板](#44-edit-template---修改模板)
-- [5. 占位符语法](#5-占位符语法)
-  - [5.1 基本规则](#51-基本规则)
-  - [5.2 示例场景](#52-示例场景)
-  - [5.3 常见错误](#53-常见错误)
-- [6. 安全模型](#6-安全模型)
-  - [6.1 防护范围](#61-防护范围)
-  - [6.2 不防护的场景](#62-不防护的场景)
-  - [6.3 首次运行对话框](#63-首次运行对话框)
-- [7. 日常维护](#7-日常维护)
-  - [7.1 查看 Keychain 条目](#71-查看-keychain-条目)
-  - [7.2 清理退役的 Runner](#72-清理退役的-runner)
-  - [7.3 检查二进制元数据](#73-检查二进制元数据)
-- [8. 故障排查](#8-故障排查)
-  - [8.1 首次运行弹窗被拒绝](#81-首次运行弹窗被拒绝)
-  - [8.2 运行时找不到程序](#82-运行时找不到程序)
-  - [8.3 GUI 无法启动](#83-gui-无法启动)
-- [9. 最佳实践](#9-最佳实践)
-  - [9.1 命名规范](#91-命名规范)
-  - [9.2 密钥轮换策略](#92-密钥轮换策略)
-  - [9.3 团队协作](#93-团队协作)
+> **Complete operating manual for end users** — from getting started to advanced usage.
 
 ---
 
-## 1. 快速开始
+## Table of Contents
 
-### 1.1 GUI 用户（推荐）
+- [1. Quick Start](#1-quick-start)
+  - [1.1 GUI Users (Recommended)](#11-gui-users-recommended)
+  - [1.2 CLI Users (Advanced)](#12-cli-users-advanced)
+- [2. GUI Seal Wizard in Depth](#2-gui-seal-wizard-in-depth)
+  - [2.1 Launching the Wizard](#21-launching-the-wizard)
+  - [2.2 Step 1: Command Template](#22-step-1-command-template)
+  - [2.3 Step 2: Secret Collection](#23-step-2-secret-collection)
+  - [2.4 Step 3: Options](#24-step-3-options)
+  - [2.5 Step 4: Execute and Preview](#25-step-4-execute-and-preview)
+  - [2.6 Build Template from Command (Simplified Entry)](#26-build-template-from-command-simplified-entry)
+- [3. Runner Management](#3-runner-management)
+  - [3.1 View Runner List](#31-view-runner-list)
+  - [3.2 Edit Template (Key Rotation)](#32-edit-template-key-rotation)
+  - [3.3 Delete a Runner](#33-delete-a-runner)
+- [4. CLI Reference](#4-cli-reference)
+  - [4.1 seal — Seal a Command](#41-seal--seal-a-command)
+  - [4.2 rotate — Rotate the Key](#42-rotate--rotate-the-key)
+  - [4.3 list — List Runners](#43-list--list-runners)
+  - [4.4 edit-template — Edit Template](#44-edit-template--edit-template)
+- [5. Placeholder Syntax](#5-placeholder-syntax)
+  - [5.1 Basic Rules](#51-basic-rules)
+  - [5.2 Example Scenarios](#52-example-scenarios)
+  - [5.3 Common Mistakes](#53-common-mistakes)
+- [6. Security Model](#6-security-model)
+  - [6.1 What Is Protected](#61-what-is-protected)
+  - [6.2 What Is Not Protected](#62-what-is-not-protected)
+  - [6.3 First-Run Dialog](#63-first-run-dialog)
+- [7. Daily Maintenance](#7-daily-maintenance)
+  - [7.1 Inspect Keychain Entries](#71-inspect-keychain-entries)
+  - [7.2 Retire Old Runners](#72-retire-old-runners)
+  - [7.3 Inspect Binary Metadata](#73-inspect-binary-metadata)
+- [8. Troubleshooting](#8-troubleshooting)
+  - [8.1 First-Run Dialog Was Denied](#81-first-run-dialog-was-denied)
+  - [8.2 Program Not Found at Runtime](#82-program-not-found-at-runtime)
+  - [8.3 GUI Fails to Launch](#83-gui-fails-to-launch)
+- [9. Best Practices](#9-best-practices)
+  - [9.1 Naming Conventions](#91-naming-conventions)
+  - [9.2 Key Rotation Strategy](#92-key-rotation-strategy)
+  - [9.3 Team Collaboration](#93-team-collaboration)
 
-**适用人群**：普通用户、不喜欢命令行的用户
+---
+
+## 1. Quick Start
+
+### 1.1 GUI Users (Recommended)
+
+**Who this is for**: everyday users and anyone who prefers not to touch the command line.
 
 ```bash
-# 1. 克隆仓库
+# 1. Clone the repository
 git clone https://github.com/szgenle/cmdseal.git
 cd cmdseal
 
-# 2. 安装依赖
+# 2. Install dependencies
 make sync
 
-# 3. 构建 GUI 应用
+# 3. Build the GUI app
 make app
 
-# 4. 启动应用
+# 4. Launch the app
 open dist/cmdseal.app
 ```
 
-✅ **完成！** 现在你将看到封存向导的图形界面。
+✅ **Done!** The seal wizard GUI should now appear.
 
-> 🔰 **初次使用建议：** 主窗口点 **「从命令生成模板…」**（详见 [§ 2.6](#26-从命令生成模板简化入口)）——
-> 照着顶部示例 `echo hello world` 跑一遍全流程，认识运行时参数概念后再回头看密码味更重的封存向导。
+> 🔰 **First-time tip:** From the main window click **“Build template from command…”** (see [§ 2.6](#26-build-template-from-command-simplified-entry)).
+> Follow the top-of-page example `echo hello world` end-to-end once — get comfortable with the runtime-argument concept, then come back to the more security-heavy seal wizard.
 
 ---
 
-### 1.2 CLI 用户（高级）
+### 1.2 CLI Users (Advanced)
 
-**适用人群**：开发者、CI/CD 管道、自动化脚本
+**Who this is for**: developers, CI/CD pipelines, and automation scripts.
 
 ```bash
-# 1. 克隆仓库
+# 1. Clone the repository
 git clone https://github.com/szgenle/cmdseal.git
 cd cmdseal
 
-# 2. 封存一个命令（交互式输入密码）
+# 2. Seal a command (you will be prompted for the secret interactively)
 python3 cmdseal.py seal \
     --command 'zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}' \
     --output ./my_sealed_zip
 
-# 3. 使用封存的二进制
+# 3. Use the sealed binary
 ./my_sealed_zip /tmp/output.zip /path/to/secret_file.txt
 ```
 
-> 💡 **提示**：GUI 用户请运行 `make app`；CLI 适用于脚本编写、CI 管道和审计。
+> 💡 **Tip**: GUI users should run `make app`; the CLI is meant for scripting, CI pipelines, and auditing.
 
 ---
 
-## 2. GUI 封存向导详解
+## 2. GUI Seal Wizard in Depth
 
-### 2.1 启动向导
+### 2.1 Launching the Wizard
 
 ```bash
-# 开发模式（需要 Python 环境）
+# Development mode (requires a Python environment)
 make run
 
-# 或启动构建好的 .app
+# Or launch the built .app
 open dist/cmdseal.app
 ```
 
 ---
 
-### 2.2 第一步：命令模板
+### 2.2 Step 1: Command Template
 
-**你要做什么**：输入要封存的命令模板
+**Goal**: enter the command template you want to seal.
 
-**支持的语法**：
+**Supported syntax**:
 
-| 类型 | 示例 | 说明 |
-|------|------|------|
-| **字面量密码** | `zip -j -P mypassword` | 直接写入命令（简单但不推荐用于高安全场景） |
-| **Secret 占位符** | `{{secret:zippw}}` | 封存时采集，不暴露给 shell history |
-| **运行时参数** | `{{arg:1}}` `{{arg:2}}` | 运行时由用户传入 |
+| Type | Example | Description |
+|------|---------|-------------|
+| **Literal password** | `zip -j -P mypassword` | Written verbatim into the command (simple, not recommended for high-security cases). |
+| **Secret placeholder** | `{{secret:zippw}}` | Collected at seal time, never exposed in shell history. |
+| **Runtime argument** | `{{arg:1}}` `{{arg:2}}` | Supplied by the caller at runtime. |
 
-**示例**：
+**Examples**:
 
 ```bash
-# 示例 1：字面量密码（简单场景）
+# Example 1: Literal password (simple case)
 zip -j -P mypassword {{arg:1}} {{arg:2}}
 
-# 示例 2：Secret 占位符（推荐）
+# Example 2: Secret placeholder (recommended)
 zhmm-cli --pwd {{secret:master}} -s {{arg:1}}
 
-# 示例 3：混合使用
+# Example 3: Mixed usage
 openssl enc -aes-256-cbc -k {{secret:key}} -in {{arg:1}} -out {{arg:2}}
 ```
 
-**智能警告**：
+**Smart warnings**:
 
-- ⚠️ 检测到未包裹的 `secret:`/`arg:` → 请用 `{{secret:NAME}}` 或 `{{arg:N}}`
-- ℹ️ 首 token 非绝对路径 → 将在封存时解析为绝对路径
-- ⚠️ 首 token 是占位符 → 请确保运行时传入绝对路径
+- ⚠️ Unwrapped `secret:` / `arg:` detected → use `{{secret:NAME}}` or `{{arg:N}}`.
+- ℹ️ First token is not an absolute path → it will be resolved to an absolute path at seal time.
+- ⚠️ First token is a placeholder → make sure an absolute path is passed in at runtime.
 
-> 💡 **想要 Tab 路径补全？** 封存向导暂未提供；若你是初学者或不需要 `{{secret:}}`，
-> 请改用主窗口的「从命令生成模板…」入口（详见 [§ 2.6](#26-从命令生成模板简化入口)）。
+> 💡 **Want Tab path completion?** The seal wizard does not provide it; if you are a beginner or do not need `{{secret:}}`,
+> use the main window’s “Build template from command…” entry instead (see [§ 2.6](#26-build-template-from-command-simplified-entry)).
 
 ---
 
-### 2.3 第二步：Secret 采集
+### 2.3 Step 2: Secret Collection
 
-**何时出现**：仅当命令模板中包含 `{{secret:NAME}}` 时
+**When it appears**: only when the command template contains `{{secret:NAME}}`.
 
-**你要做什么**：为每个 secret 占位符输入实际值
+**Goal**: provide a real value for every secret placeholder.
 
-**特性**：
-- 🔒 密码输入框默认隐藏（点击"显示"可查看）
-- ✅ 必填项，未填写时"下一步"按钮禁用
-- 🚀 无 `{{secret:*}}` 时自动跳过此页
+**Features**:
+- 🔒 Password fields are hidden by default (click “Show” to reveal).
+- ✅ Values are required; the “Next” button stays disabled until every field is filled.
+- 🚀 If there is no `{{secret:*}}`, this page is skipped automatically.
 
-**示例**：
+**Example**:
 
-如果你的命令是：
+Given this command:
 ```bash
 zhmm-cli --pwd {{secret:master}} --api-key {{secret:apikey}}
 ```
 
-此页将显示两个输入框：
-1. `master` - 输入主密码
-2. `apikey` - 输入 API 密钥
+The page will show two input fields:
+1. `master` — enter the master password
+2. `apikey` — enter the API key
 
 ---
 
-### 2.4 第三步：选项配置
+### 2.4 Step 3: Options
 
-**你要填写**：
+**Fields you fill in**:
 
-| 字段 | 必填 | 说明 | 示例 |
-|------|------|------|------|
-| **输出路径** | ✅ | 生成的二进制文件路径 | `~/bin/my_runner` |
-| **标签** | ❌ | 便于识别的标签名 | `生产环境 ZIP 加密` |
-| **签名身份** | ❌ | Developer ID（可选） | `Developer ID Application: ...` |
+| Field | Required | Description | Example |
+|-------|----------|-------------|---------|
+| **Output path** | ✅ | Path of the generated binary | `~/bin/my_runner` |
+| **Label** | ❌ | Friendly label | `Prod ZIP encryption` |
+| **Signing identity** | ❌ | Developer ID (optional) | `Developer ID Application: ...` |
 
-**默认行为**：
-- 不填标签 → 使用输出文件名
-- 不填签名 → 使用 ad-hoc 签名（足够安全）
-
----
-
-### 2.5 第四步：执行与预览
-
-**你将看到**：
-
-1. **命令预览** - 最终封存的命令（含解析后的绝对路径）
-2. **Secret 列表** - 已采集的 secret（值已隐藏）
-3. **运行时参数** - 需要传入的参数数量
-
-**操作**：
-- 点击 **“执行”** → 后台运行 `cmdseal.py seal`
-- 进度条显示构建状态
-- 完成后显示成功消息和文件位置
+**Defaults**:
+- No label → the output filename is used.
+- No signing identity → an ad-hoc signature is used (secure enough).
 
 ---
 
-### 2.6 从命令生成模板（简化入口）
+### 2.5 Step 4: Execute and Preview
 
-**适用对象**：
-- 初次使用、不了解 `{{secret:}}`/`{{arg:}}` 语法的用户
-- 已有一条可直接执行的命令，只想点选“哪几个参数保留给运行时传入”
+**What you see**:
 
-**入口**：主窗口 → **「从命令生成模板…」** 按钮
+1. **Command preview** — the final sealed command (with absolute paths resolved).
+2. **Secret list** — collected secrets (values hidden).
+3. **Runtime arguments** — how many arguments the caller must pass.
 
-向导共 4 页，比 § 2.2 的封存向导更直观：用户先把命令写对并试跑成功，再点选运行时参数。
-
----
-
-#### 2.6.1 第一步：命令输入 + 试运行
-
-**顶部常驻示例**：`echo hello world`。点「填入示例」一键填充，然后「试运行」走通整条流程。
-
-> ⚠ **不走 shell**：命令直接 `execv` 执行，环境变量 `$VAR`、管道 `|`、重定向 `>`、通配符 `*` 都不会展开。需要 shell 特性请自己包 `sh -c`。
-
-**验证规则**：
-- 静态检查：`shlex` 合法 + 首 token 在 PATH 中或为绝对可执行文件
-- 动态验证：**必须**点「试运行」且 exit code = 0，才能进入下一步
-- 试运行有 10 秒超时；命令一旦被修改，“已验证”状态立即失效
-
-**Tab 路径补全**（bash 风格）：
-
-| 情形 | 行为 |
-|------|------|
-| 光标前 token 以 `/`、`~`、`./`、`../` 开头 | 触发路径补全 |
-| 唯一匹配 | 直接补全，目录尾随 `/` |
-| 多个匹配 | 先补到最长公共前缀；再按一次 Tab 列出候选 |
-| 非路径 token | Tab 切焦点到下一个控件（和常规表单一致） |
-
-`~/` 前缀会保留（不会被展开成绝对 `$HOME` 写回输入框）。
+**Actions**:
+- Click **“Execute”** → runs `cmdseal.py seal` in the background.
+- A progress bar shows the build status.
+- On success, the result message and output location are displayed.
 
 ---
 
-#### 2.6.2 第二步：选择运行时参数
+### 2.6 Build Template from Command (Simplified Entry)
 
-命令的每个 token 被切片为可点选的“chip”：
+**Who this is for**:
+- First-time users who are not yet comfortable with `{{secret:}}` / `{{arg:}}` syntax.
+- Users who already have a working command and just want to point-and-click which arguments should become runtime parameters.
 
-- 白底 = 字面量（封入产物中）
-- 蓝底 = 运行时参数（按出现顺序编号为 `{{arg:1}}`、`{{arg:2}}` …）
-- 未选中的 token 会走 `shlex.quote` 保护，含空格/特殊字符的字面量不会被破坏
-- 选中首 token 会给出警告：运行时需传入绝对可执行路径
+**Entry point**: main window → **“Build template from command…”** button.
 
-下方实时展示最终模板（如 `zip -j -P Demo1234 {{arg:1}} {{arg:2}}`）。
-
----
-
-#### 2.6.3 第三步：保存位置
-
-| 字段 | 默认值 | 说明 |
-|------|--------|------|
-| **输出路径** | `~/cmdseal/bin/seal_<原命令名>` | 首次使用自动创建目录；文件名加 `seal_` 前缀区分原命令（与 demo 的 `seal_zip` 一致） |
-| **Label** | 留空 | 留空则按输出文件名自动生成 |
-| **Keychain 账号** | `$USER` | 存放 AEAD 密钥的账号名 |
-
-若要全局调用，点「浏览…」手动改成 `/usr/local/bin/seal_xxx`（该目录写入可能需 sudo）。
+The wizard has 4 pages and is more approachable than the seal wizard in § 2.2: write and successfully run the command first, then pick the runtime arguments.
 
 ---
 
-#### 2.6.4 第四步：执行
+#### 2.6.1 Step 1: Command Input + Dry Run
 
-点击 **「执行」** 后后台调用 `cmdseal.py seal`，日志实时输出到页面。完成后：
+**Always-visible example**: `echo hello world`. Click “Fill example” to insert it, then “Dry run” to walk through the full flow.
+
+> ⚠ **No shell involved**: the command is executed directly with `execv`; environment variables `$VAR`, pipes `|`, redirection `>`, and globs `*` are not expanded. Wrap with `sh -c` yourself if you need shell features.
+
+**Validation rules**:
+- Static check: `shlex`-parseable, and the first token is either on `PATH` or an absolute executable file.
+- Dynamic check: you **must** click “Dry run” and see exit code = 0 to proceed.
+- Dry run has a 10-second timeout; any edit to the command immediately invalidates the “verified” state.
+
+**Tab path completion** (bash-style):
+
+| Situation | Behavior |
+|-----------|----------|
+| Token before cursor starts with `/`, `~`, `./`, or `../` | Triggers path completion |
+| Single match | Completes directly; directories gain a trailing `/` |
+| Multiple matches | Completes to the longest common prefix; press Tab again to list candidates |
+| Non-path token | Tab moves focus to the next widget (normal form behavior) |
+
+The `~/` prefix is preserved (it is not expanded to an absolute `$HOME` path in the input).
+
+---
+
+#### 2.6.2 Step 2: Pick Runtime Arguments
+
+Each token of the command is shown as a clickable “chip”:
+
+- White background = literal (embedded into the sealed artifact).
+- Blue background = runtime argument (numbered `{{arg:1}}`, `{{arg:2}}`, … in order of appearance).
+- Unselected tokens are protected via `shlex.quote`, so literals with spaces or special characters stay intact.
+- Selecting the first token triggers a warning: an absolute executable path must be supplied at runtime.
+
+Below, the final template is shown live (e.g. `zip -j -P Demo1234 {{arg:1}} {{arg:2}}`).
+
+---
+
+#### 2.6.3 Step 3: Save Location
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| **Output path** | `~/cmdseal/bin/seal_<original command name>` | The directory is created on first use; the `seal_` prefix distinguishes it from the original command (matching the demo’s `seal_zip`). |
+| **Label** | empty | Auto-generated from the output filename when left empty. |
+| **Keychain account** | `$USER` | The account that owns the AEAD key. |
+
+To invoke the runner globally, click “Browse…” and manually choose something like `/usr/local/bin/seal_xxx` (writing to that path may require sudo).
+
+---
+
+#### 2.6.4 Step 4: Execute
+
+After clicking **“Execute”**, the wizard invokes `cmdseal.py seal` in the background and streams the log to the page. When it finishes:
 
 ```bash
-# 验证产物
-~/cmdseal/bin/seal_echo hello world   # → 输出 hello world
+# Verify the artifact
+~/cmdseal/bin/seal_echo hello world   # → prints hello world
 
-# 在 Runner 管理窗里重新刷新，可看到新增的 seal_echo
+# Refresh the Runner Management window — the new seal_echo entry appears
 ```
 
-> 💡 与§ 2 的差异：本入口不暴露 `{{secret:}}`。如你需要密码采集（避免出现在 history 里），请回头使用 [§ 2](#2-gui-封存向导详解) 的封存向导。
+> 💡 Difference vs. § 2: this entry never exposes `{{secret:}}`. If you need secret collection (to keep passwords out of history), go back to the seal wizard in [§ 2](#2-gui-seal-wizard-in-depth).
 
 ---
 
-## 3. Runner 管理
+## 3. Runner Management
 
-### 3.1 查看 Runner 列表
+### 3.1 View Runner List
 
-**入口**：主窗口 → "管理 runner…"
+**Entry point**: main window → “Manage runners…”
 
-**功能**：
-- 📋 表格展示所有已封存的 runner
-- 🔍 4 列信息：
-  - **Label** - 标签名
-  - **Service** - Keychain service 名称
-  - **Template** - 命令模板（位置参数显示为 `***`）
-  - **Created** - 创建时间
+**Features**:
+- 📋 Table view of every sealed runner.
+- 🔍 Four columns:
+  - **Label** — the friendly label.
+  - **Service** — the keychain service name.
+  - **Template** — the command template (positional arguments are shown as `***`).
+  - **Created** — creation timestamp.
 
-**操作**：
-- 点击 "刷新" 按钮重新扫描 keychain
-- 右键点击 runner 打开上下文菜单
-
----
-
-### 3.2 修改模板（密钥轮换）
-
-**使用场景**：
-- 想更换密钥但不想重新构建二进制
-- 想修改命令模板
-
-**操作步骤**：
-
-1. 打开 Runner 管理窗
-2. 右键选择目标 runner
-3. 点击 **"修改模板…"**
-4. 输入新的命令模板
-5. 如果有 `{{secret:*}}`，会提示重新输入
-6. 点击 "保存" → 自动完成：
-   - ✅ 重新编译二进制
-   - ✅ 生成新密钥 K
-   - ✅ 删除旧 service
-   - ✅ 轮换 cdhash + ACL
-
-**优势**：
-- 🚀 无需用户交互，约 1 秒完成
-- 🔒 原子性操作，不会出现中间状态
-- ✅ 零授权弹窗（owner 身份操作）
+**Actions**:
+- Click “Refresh” to re-scan the keychain.
+- Right-click a runner to open the context menu.
 
 ---
 
-### 3.3 删除 Runner
+### 3.2 Edit Template (Key Rotation)
 
-**操作步骤**：
+**When to use**:
+- You want to rotate the key without rebuilding the binary from scratch.
+- You want to tweak the command template.
 
-1. 打开 Runner 管理窗
-2. 右键选择目标 runner
-3. 点击 **"删除…"**
-4. 确认删除
+**Steps**:
 
-**联动清理**：
-- ✅ 删除 Keychain 条目（`cmdseal.<hash>.K`）
-- ✅ 删除磁盘上的二进制文件
-- ⚠️ 确认前请备份重要数据
+1. Open the Runner Management window.
+2. Right-click the target runner.
+3. Choose **“Edit template…”**.
+4. Enter the new command template.
+5. If there are `{{secret:*}}` placeholders, you will be prompted to re-enter their values.
+6. Click “Save” → everything below happens automatically:
+   - ✅ Recompile the binary.
+   - ✅ Generate a new key K.
+   - ✅ Remove the old service.
+   - ✅ Rotate the cdhash + ACL.
+
+**Benefits**:
+- 🚀 No user interaction required; takes roughly 1 second.
+- 🔒 Atomic operation, no intermediate state.
+- ✅ Zero authorization dialogs (the operation runs as the owner).
 
 ---
 
-## 4. CLI 命令参考
+### 3.3 Delete a Runner
 
-### 4.1 seal - 封存命令
+**Steps**:
 
-**基本用法**：
+1. Open the Runner Management window.
+2. Right-click the target runner.
+3. Choose **“Delete…”**.
+4. Confirm the deletion.
+
+**Cascaded cleanup**:
+- ✅ The keychain entry (`cmdseal.<hash>.K`) is removed.
+- ✅ The binary on disk is removed.
+- ⚠️ Make sure to back up important data before confirming.
+
+---
+
+## 4. CLI Reference
+
+### 4.1 seal — Seal a Command
+
+**Basic usage**:
 
 ```bash
 python3 cmdseal.py seal \
@@ -356,32 +356,32 @@ python3 cmdseal.py seal \
     [--sign IDENTITY]
 ```
 
-**参数说明**：
+**Parameters**:
 
-| 参数 | 必填 | 说明 |
-|------|------|------|
-| `--command` | ✅ | 命令模板（含占位符） |
-| `--output` | ✅ | 输出二进制路径 |
-| `--label` | ❌ | 标签名（默认：输出文件名） |
-| `--user` | ❌ | Keychain 所有者（默认：当前用户） |
-| `--sign` | ❌ | 签名身份（默认：ad-hoc） |
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `--command` | ✅ | Command template (may contain placeholders). |
+| `--output` | ✅ | Path of the output binary. |
+| `--label` | ❌ | Friendly label (default: output filename). |
+| `--user` | ❌ | Keychain owner (default: current user). |
+| `--sign` | ❌ | Signing identity (default: ad-hoc). |
 
-**示例**：
+**Examples**:
 
 ```bash
-# 示例 1：基本封存
+# Example 1: Basic seal
 python3 cmdseal.py seal \
     --command 'zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}' \
     --output ./seal_zip
 
-# 示例 2：带标签和用户
+# Example 2: With label and explicit user
 python3 cmdseal.py seal \
     --command 'openssl enc -aes-256-cbc -k {{secret:key}} -in {{arg:1}}' \
     --output ./encrypt_file \
-    --label "生产加密工具" \
+    --label "Prod encryption tool" \
     --user $(whoami)
 
-# 示例 3：Developer ID 签名
+# Example 3: Developer ID signing
 python3 cmdseal.py seal \
     --command 'my-command {{arg:1}}' \
     --output ./my_runner \
@@ -390,71 +390,71 @@ python3 cmdseal.py seal \
 
 ---
 
-### 4.2 rotate - 轮换密钥
+### 4.2 rotate — Rotate the Key
 
-**用途**：生成新密钥，无需重新构建模板
+**Purpose**: generate a new key without rebuilding the template.
 
 ```bash
 python3 cmdseal.py rotate ./seal_zip
 ```
 
-**执行过程**：
-1. 生成新的 AES-256 密钥
-2. 重写 AEAD 密文
-3. 重新签名二进制
-4. 原子性替换 keychain 条目
+**What it does**:
+1. Generates a fresh AES-256 key.
+2. Rewrites the AEAD ciphertext.
+3. Re-signs the binary.
+4. Atomically replaces the keychain entry.
 
-**特性**：
-- ⚡ 约 1 秒完成
-- 🔇 完全静默，无需用户交互
-- 🔒 原子性操作，无中间状态
+**Characteristics**:
+- ⚡ Finishes in roughly 1 second.
+- 🔇 Completely silent — no user interaction required.
+- 🔒 Atomic operation, no intermediate state.
 
 ---
 
-### 4.3 list - 列出 Runner
+### 4.3 list — List Runners
 
-**基本用法**：
+**Basic usage**:
 
 ```bash
-# 表格输出
+# Tabular output
 python3 cmdseal.py list
 
-# JSON 输出（适合脚本处理）
+# JSON output (suitable for scripting)
 python3 cmdseal.py list --json
 ```
 
-**输出示例**：
+**Sample output**:
 
 ```
 Label              Service                          Template
 ────────────────── ──────────────────────────────── ─────────────────────────
-生产加密工具       cmdseal.a1b2c3.K                 openssl enc -aes-256-cbc -k *** -in {{arg:1}}
-ZIP 加密           cmdseal.d4e5f6.K                 zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}
+Prod encryption    cmdseal.a1b2c3.K                 openssl enc -aes-256-cbc -k *** -in {{arg:1}}
+ZIP encryption     cmdseal.d4e5f6.K                 zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}
 ```
 
-**字段说明**：
-- **Label** - 标签名
-- **Service** - Keychain service 名称
-- **Template** - 命令模板（位置参数已掩码为 `***`）
+**Column meanings**:
+- **Label** — friendly label.
+- **Service** — keychain service name.
+- **Template** — command template (positional arguments masked as `***`).
 
 ---
 
-### 4.4 edit-template - 修改模板
+### 4.4 edit-template — Edit Template
 
-**用途**：CLI 方式的模板修改（等同于 GUI 的"修改模板…"）
+**Purpose**: CLI equivalent of the GUI “Edit template…” action.
 
 ```bash
 python3 cmdseal.py edit-template ./seal_zip --new-command 'NEW_COMMAND'
 ```
 
-**参数**：
+**Parameters**:
 
-| 参数 | 必填 | 说明 |
-|------|------|------|
-| `BINARY` | ✅ | 要修改的二进制路径 |
-| `--new-command` | ✅ | 新命令模板 |
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `BINARY` | ✅ | Path of the binary to edit. |
+| `--new-command` | ✅ | New command template. |
 
-**示例**：
+**Example**:
 
 ```bash
 python3 cmdseal.py edit-template ./seal_zip \
@@ -463,175 +463,175 @@ python3 cmdseal.py edit-template ./seal_zip \
 
 ---
 
-## 5. 占位符语法
+## 5. Placeholder Syntax
 
-### 5.1 基本规则
+### 5.1 Basic Rules
 
-**占位符必须独占一个 argv 位置**：
+**A placeholder must occupy a standalone argv slot**:
 
 ```bash
-# ✅ 正确：独占 token
+# ✅ Correct: standalone token
 --pwd {{secret:mypass}}
 
-# ❌ 错误：混合写法（会被拒绝）
+# ❌ Wrong: glued into another token (rejected)
 --pwd={{secret:mypass}}
 
-# ✅ 正确：拆成两个 token
+# ✅ Correct: split into two tokens
 --pwd {{secret:mypass}}
 ```
 
-**占位符类型**：
+**Placeholder types**:
 
-| 占位符 | 解析时机 | 取值来源 |
-|--------|----------|----------|
-| `{{secret:NAME}}` | 封存时 | 交互式提示，嵌入 AEAD 密文 |
-| `{{arg:N}}` | 运行时 | 生成二进制的 `argv[N]` |
-| 其他 token | — | 原样透传 |
+| Placeholder | Resolved at | Source |
+|-------------|-------------|--------|
+| `{{secret:NAME}}` | Seal time | Interactive prompt; embedded inside the AEAD ciphertext. |
+| `{{arg:N}}` | Runtime | `argv[N]` of the generated binary. |
+| Any other token | — | Passed through verbatim. |
 
 ---
 
-### 5.2 示例场景
+### 5.2 Example Scenarios
 
-**场景 1：密码管理的 CLI 工具**
+**Scenario 1: A password-manager CLI tool**
 
 ```bash
 zhmm-cli --pwd {{secret:master}} --search {{arg:1}}
 ```
 
-运行时：
+At runtime:
 ```bash
-./sealed_runner "搜索关键词"
-# master 密码已在封存时嵌入，无需传入
+./sealed_runner "search keyword"
+# The master password is already embedded at seal time; nothing to pass.
 ```
 
 ---
 
-**场景 2：文件加密/解密**
+**Scenario 2: File encryption / decryption**
 
 ```bash
 openssl enc -aes-256-cbc -k {{secret:enc_key}} -in {{arg:1}} -out {{arg:2}}
 ```
 
-运行时：
+At runtime:
 ```bash
 ./sealed_runner /path/to/input.txt /path/to/output.enc
 ```
 
 ---
 
-**场景 3：批量操作（字面量密码）**
+**Scenario 3: Batch operations (literal password)**
 
 ```bash
-# 简单场景：密码不敏感
+# Simple case: password is not sensitive
 zip -j -P mypassword {{arg:1}} {{arg:2}}
 ```
 
-运行时：
+At runtime:
 ```bash
 ./sealed_runner /tmp/output.zip /path/to/file.txt
 ```
 
 ---
 
-### 5.3 常见错误
+### 5.3 Common Mistakes
 
-**错误 1：裸写占位符**
+**Mistake 1: Writing placeholder tokens without braces**
 
 ```bash
-# ❌ 错误
+# ❌ Wrong
 zhmm-cli --pwd secret:master
 
-# ✅ 正确
+# ✅ Correct
 zhmm-cli --pwd {{secret:master}}
 ```
 
-**错误 2：混合 token**
+**Mistake 2: Glued tokens**
 
 ```bash
-# ❌ 错误
+# ❌ Wrong
 --api-key={{secret:key}}
 
-# ✅ 正确
+# ✅ Correct
 --api-key {{secret:key}}
 ```
 
-**错误 3：arg 索引从 0 开始**
+**Mistake 3: `arg` indices start at 0**
 
 ```bash
-# ❌ 错误：没有 {{arg:0}}
+# ❌ Wrong: there is no {{arg:0}}
 my-command {{arg:0}} {{arg:1}}
 
-# ✅ 正确：从 1 开始
+# ✅ Correct: indices start at 1
 my-command {{arg:1}} {{arg:2}}
 ```
 
 ---
 
-## 6. 安全模型
+## 6. Security Model
 
-### 6.1 防护范围
+### 6.1 What Is Protected
 
-✅ **cmdseal 保护你免受**：
+✅ **cmdseal protects you from**:
 
-1. **通过 argv 或 `ps` 的秘密窃取**
-   - 秘密以 AEAD 密文形式嵌入二进制
-   - 仅在内存中短暂解密（keychain 获取 → `execv`）
+1. **Secret exfiltration via argv or `ps`**
+   - Secrets are embedded as AEAD ciphertext inside the binary.
+   - They are decrypted only briefly in memory (keychain fetch → `execv`).
 
-2. **其他进程读取 keychain 条目**
-   - macOS ACL 绑定到确切的二进制 cdhash
-   - 已验证拦截：`/usr/bin/security`、ad-hoc 签名探测器、位级相同副本
+2. **Other processes reading the keychain entry**
+   - The macOS ACL is bound to the exact binary cdhash.
+   - Verified to block: `/usr/bin/security`, ad-hoc-signed probes, and bit-identical copies.
 
-3. **基于 PATH 的程序替换**
-   - 运行器使用 `execv` + 封存时的绝对路径
-   - 无运行时 `$PATH` 查找
+3. **PATH-based program substitution**
+   - The runner uses `execv` with the absolute path captured at seal time.
+   - No runtime `$PATH` lookup.
 
-4. **通过环境变量的 Dylib 注入**
-   - 运行器剥离 `DYLD_*` 和 `LD_*`
-   - 使用 `codesign --options runtime` 签名
-
----
-
-### 6.2 不防护的场景
-
-❌ **cmdseal 不保护你免受**：
-
-- **root 攻击者** - 可读取任何进程内存、任何 keychain
-- **同用户的任意代码执行** - 可调试/转储运行中的二进制
-- **构建前的生成机器篡改**
-- **目标命令的侧信道攻击** - 例如 `zip` 本身写入日志
-- **Linux 或 Windows 上的任何攻击**
-
-> ⚠️ **重要**：cmdseal 是**能力网关**，不是保险库。请诚实地评估你的威胁模型。
+4. **Dylib injection via environment variables**
+   - The runner strips `DYLD_*` and `LD_*`.
+   - The binary is signed with `codesign --options runtime`.
 
 ---
 
-### 6.3 首次运行对话框
+### 6.2 What Is Not Protected
 
-**何时出现**：首次运行新生成的二进制时
+❌ **cmdseal does NOT protect you from**:
 
-**对话框内容**：
-- 登录密码输入
-- "始终允许" 按钮
+- **A root attacker** — can read any process memory and any keychain.
+- **Arbitrary code execution as the same user** — can debug / dump the running binary.
+- **Tampering with the build machine prior to seal time.**
+- **Side channels in the target command** — e.g. `zip` itself writing a log.
+- **Any attack on Linux or Windows.**
 
-**为什么需要**：
-- macOS partition-list 握手过程
-- 将 keychain 条目绑定到此二进制的 cdhash
-
-**发生频率**：
-- 每个封存的二进制 × 每个用户机器 = **仅一次**
-- 后续运行完全静默，毫秒级快速
+> ⚠️ **Important**: cmdseal is a **capability gateway**, not a vault. Be honest about your threat model.
 
 ---
 
-## 7. 日常维护
+### 6.3 First-Run Dialog
 
-### 7.1 查看 Keychain 条目
+**When it appears**: the first time a freshly generated binary is run.
+
+**Dialog contents**:
+- Login password field.
+- “Always Allow” button.
+
+**Why it is needed**:
+- The macOS partition-list handshake.
+- Binds the keychain entry to this binary’s cdhash.
+
+**Frequency**:
+- Once per sealed binary, per user machine — **exactly once**.
+- Every subsequent run is completely silent and takes milliseconds.
+
+---
+
+## 7. Daily Maintenance
+
+### 7.1 Inspect Keychain Entries
 
 ```bash
-# 查看元数据（不显示密钥值）
+# Show metadata (the secret value is not shown)
 security find-generic-password -s cmdseal.<hash>.K
 
-# 示例输出
+# Sample output
 keychain: "/Users/ws/Library/Keychains/login.keychain-db"
 version: 512
 class: "genp"
@@ -642,125 +642,125 @@ attributes:
 
 ---
 
-### 7.2 清理退役的 Runner
+### 7.2 Retire Old Runners
 
-**方式 1：GUI 删除**（推荐）
-1. 打开 Runner 管理窗
-2. 右键 → "删除…"
-3. 自动清理 keychain + 二进制
+**Option 1: GUI deletion** (recommended)
+1. Open the Runner Management window.
+2. Right-click → “Delete…”.
+3. Keychain entry and binary are cleaned up automatically.
 
-**方式 2：手动清理**
+**Option 2: Manual cleanup**
 
 ```bash
-# 1. 删除 keychain 条目
+# 1. Remove the keychain entry
 security delete-generic-password -s cmdseal.<hash>.K
 
-# 2. 删除二进制文件
+# 2. Remove the binary file
 rm /path/to/sealed_binary
 ```
 
 ---
 
-### 7.3 检查二进制元数据
+### 7.3 Inspect Binary Metadata
 
 ```bash
-# 查看嵌入的元数据（无秘密可见）
+# Show embedded metadata (no secrets are visible)
 strings ./seal_zip | grep cmdseal
 
-# 示例输出
+# Sample output
 cmdseal.a1b2c3.K
-{"label":"生产加密工具","created":"2026-05-05T10:30:00"}
+{"label":"Prod encryption tool","created":"2026-05-05T10:30:00"}
 ```
 
 ---
 
-## 8. 故障排查
+## 8. Troubleshooting
 
-### 8.1 首次运行弹窗被拒绝
+### 8.1 First-Run Dialog Was Denied
 
-**症状**：运行封存的二进制时报错 "keychain access denied"
+**Symptom**: running the sealed binary reports “keychain access denied”.
 
-**原因**：首次运行时点击了"拒绝"而非"始终允许"
+**Cause**: “Deny” was clicked instead of “Always Allow” on the first run.
 
-**解决方案**：
+**Fix**:
 
 ```bash
-# 1. 删除旧的 keychain 条目
+# 1. Remove the stale keychain entry
 security delete-generic-password -s cmdseal.<hash>.K
 
-# 2. 重新运行二进制
+# 2. Run the binary again
 ./sealed_binary arg1 arg2
 
-# 3. 这次点击 "始终允许"
+# 3. This time click "Always Allow"
 ```
 
 ---
 
-### 8.2 运行时找不到程序
+### 8.2 Program Not Found at Runtime
 
-**症状**：报错 "No such file or directory" 或 "command not found"
+**Symptom**: `No such file or directory` or `command not found`.
 
-**原因**：封存时首 token 未解析为绝对路径
+**Cause**: the first token was not resolved to an absolute path at seal time.
 
-**解决方案**：
+**Fix**:
 
 ```bash
-# 检查封存时的输出
+# Check the seal-time output
 python3 cmdseal.py seal --command 'my-command {{arg:1}}' --output ./runner
-# 应该看到：resolved 'my-command' -> '/usr/local/bin/my-command'
+# You should see: resolved 'my-command' -> '/usr/local/bin/my-command'
 
-# 如果没看到，确保程序在 PATH 中
+# If you do not, make sure the program is on PATH
 which my-command
-# 或使用绝对路径
+# Or use an absolute path explicitly
 python3 cmdseal.py seal --command '/usr/local/bin/my-command {{arg:1}}' --output ./runner
 ```
 
 ---
 
-### 8.3 GUI 无法启动
+### 8.3 GUI Fails to Launch
 
-**症状**：`make run` 或 `open dist/cmdseal.app` 无响应
+**Symptom**: `make run` or `open dist/cmdseal.app` produces nothing.
 
-**排查步骤**：
+**Diagnosis**:
 
 ```bash
-# 1. 检查 PySide6 是否安装
+# 1. Check that PySide6 is installed
 uv run python -c "import PySide6; print(PySide6.__version__)"
 
-# 2. 重新安装依赖
+# 2. Reinstall dependencies
 make sync
 
-# 3. 重新构建 .app
+# 3. Rebuild the .app
 make clean
 make app
 
-# 4. 查看日志
-cat ~/Library/Logs/cmdseal.app.log 2>/dev/null || echo "无日志文件"
+# 4. Check logs
+cat ~/Library/Logs/cmdseal.app.log 2>/dev/null || echo "no log file"
 ```
 
 ---
 
-## 9. 最佳实践
+## 9. Best Practices
 
-### 9.1 命名规范
+### 9.1 Naming Conventions
 
-**标签命名**：
-
-```
-{环境}_{用途}_{工具名}
-
-示例：
-- 生产_ZIP加密_快速备份
-- 开发_API测试_临时工具
-- 测试_数据脱敏_批量处理
-```
-
-**输出文件命名**：
+**Label naming**:
 
 ```
-seal_{工具名}_{环境}
+{env}_{purpose}_{tool}
 
-示例：
+Examples:
+- prod_zip_encrypt_quick_backup
+- dev_api_test_scratch_tool
+- test_data_mask_batch
+```
+
+**Output filename**:
+
+```
+seal_{tool}_{env}
+
+Examples:
 - seal_zip_prod
 - seal_encrypt_dev
 - seal_decrypt_test
@@ -768,44 +768,44 @@ seal_{工具名}_{环境}
 
 ---
 
-### 9.2 密钥轮换策略
+### 9.2 Key Rotation Strategy
 
-**建议频率**：
+**Suggested cadence**:
 
-| 场景 | 轮换频率 | 方法 |
-|------|----------|------|
-| 生产环境 | 每 90 天 | GUI: 右键 → 修改模板 / CLI: `rotate` |
-| 测试环境 | 每 30 天 | 同上 |
-| 泄露应急 | 立即 | 同上 |
+| Scenario | Frequency | Method |
+|----------|-----------|--------|
+| Production | Every 90 days | GUI: right-click → Edit template / CLI: `rotate` |
+| Staging / testing | Every 30 days | Same as above |
+| Incident response | Immediately | Same as above |
 
-**轮换检查清单**：
+**Rotation checklist**:
 
-- [ ] 通知所有使用该 runner 的用户
-- [ ] 在低峰期执行轮换
-- [ ] 验证轮换后二进制正常工作
-- [ ] 更新文档中的 runner 信息
+- [ ] Notify every consumer of the runner.
+- [ ] Schedule the rotation during a low-traffic window.
+- [ ] Verify the rotated binary still works as expected.
+- [ ] Update documentation with the new runner information.
 
 ---
 
-### 9.3 团队协作
+### 9.3 Team Collaboration
 
-**场景**：多个开发者需要封存相同的命令模板
+**Scenario**: multiple developers need to seal the same command template.
 
-**方案 1：共享模板文件**
+**Option 1: Shared template file**
 
 ```bash
-# 1. 创建模板文件（command_template.txt）
+# 1. Create a template file (command_template.txt)
 zhmm-cli --pwd {{secret:master}} --search {{arg:1}}
 
-# 2. 团队成员各自封存
+# 2. Each teammate seals locally
 python3 cmdseal.py seal \
     --command "$(cat command_template.txt)" \
     --output ./my_runner
 
-# 3. 各自生成独立的二进制和密钥
+# 3. Each teammate gets their own binary and key
 ```
 
-**方案 2：CI/CD 管道集成**
+**Option 2: CI/CD integration**
 
 ```yaml
 # .github/workflows/seal.yml
@@ -830,58 +830,58 @@ jobs:
           path: ./sealed_runner
 ```
 
-> ⚠️ **注意**：每个机器生成的二进制是独立的（cdhash 绑定），不能跨机器共享。
+> ⚠️ **Note**: binaries generated on different machines are distinct (bound by cdhash) and cannot be shared across machines.
 
 ---
 
-## 附录
+## Appendix
 
-### A. 完整命令参考
+### A. Full Command Reference
 
 ```bash
-# 封存
+# Seal
 python3 cmdseal.py seal --command CMD --output PATH [--label LABEL] [--user USER] [--sign IDENTITY]
 
-# 轮换密钥
+# Rotate the key
 python3 cmdseal.py rotate BINARY
 
-# 列出 runner
+# List runners
 python3 cmdseal.py list [--json]
 
-# 修改模板
+# Edit template
 python3 cmdseal.py edit-template BINARY --new-command CMD
 
-# 构建 GUI
+# Build the GUI
 make app
 
-# 运行 GUI
+# Run the GUI
 make run
 ```
 
-### B. 文件结构
+### B. File Layout
 
 ```
 cmdseal/
-├── cmdseal.py              # CLI 主程序
-├── runner_aead_template.c  # Runner 模板（C 代码）
-├── gui/                    # GUI 模块
-│   ├── main_window.py      # 主窗口
-│   ├── seal_wizard.py      # 封存向导
-│   ├── runner_list.py      # Runner 列表
-│   └── backend.py          # 后端逻辑
-├── demo/                   # 示例
-├── tests/                  # 测试
-└── local/                  # 个人配置（不提交）
+├── cmdseal.py              # CLI entry point
+├── runner_aead_template.c  # Runner template (C code)
+├── gui/                    # GUI module
+│   ├── main_window.py      # Main window
+│   ├── seal_wizard.py      # Seal wizard
+│   ├── runner_list.py      # Runner list
+│   └── backend.py          # Backend logic
+├── demo/                   # Examples
+├── tests/                  # Tests
+└── local/                  # Personal config (not committed)
 ```
 
-### C. 相关文档
+### C. Related Documents
 
-- [README.md](../README.md) - 项目介绍
-- [DESIGN.md](../DESIGN.md) - 设计文档
-- [LICENSE](../LICENSE) - MIT 许可证
+- [README.md](../README.md) — project overview.
+- [DESIGN.md](../DESIGN.md) — design document.
+- [LICENSE](../LICENSE) — MIT license.
 
 ---
 
-**文档版本**: v1.1  
-**最后更新**: 2026-05-05  
-**维护者**: szgenle
+**Document version**: v1.1  
+**Last updated**: 2026-05-05  
+**Maintainer**: szgenle
