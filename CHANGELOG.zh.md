@@ -56,6 +56,13 @@ v1.2 的 GUI 配套版本。将 CLI 端已具备的多段管道能力带到
   折叠为 `前两字符 + ***`；其他裸 token（包括会泄露文件
   系统布局的绝对路径）脱敏为 `***`。
 
+### 文档
+
+- **第三方许可双语覆盖**。新增
+  [`THIRD_PARTY_LICENSES.zh.md`](./THIRD_PARTY_LICENSES.zh.md)
+  作为 `THIRD_PARTY_LICENSES.md` 的中文对照版，两份文件
+  顶部加上语言切换提示；`README.zh.md` 现在链接到中文版。
+
 ### 移除
 
 - **`edit-template` 全链路移除**。按照更严格的“CLI 永远看不到
@@ -178,7 +185,7 @@ v1.2 的 GUI 配套版本。将 CLI 端已具备的多段管道能力带到
 - **`tests/`** 目录：包含无头 GUI 测试
   （`QT_QPA_PLATFORM=offscreen`）和 `test_v11_e2e.sh` 端到端
   安全验证脚本（7 项指标）。
-- **第三方许可披露**：`THIRD_PARTY_LICENSES.md`，用于 PySide6
+- **第三方许可披露**：`THIRD_PARTY_LICENSES.md` / `THIRD_PARTY_LICENSES.zh.md`，用于 PySide6
   / Qt LGPL 合规。
 - **MIT 协议**文件（`LICENSE`）。
 

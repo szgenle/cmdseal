@@ -64,6 +64,14 @@ compose pipelines visually.
   ***`; any other bare token (including absolute paths that would
   otherwise leak filesystem layout) becomes `***`.
 
+### Docs
+
+- **Bilingual coverage for third-party licenses.** Added
+  [`THIRD_PARTY_LICENSES.zh.md`](./THIRD_PARTY_LICENSES.zh.md) as
+  the Chinese counterpart of `THIRD_PARTY_LICENSES.md`, with
+  language-switch headers on both files. `README.zh.md` now links
+  to the Chinese edition.
+
 ### Removed
 
 - **`edit-template` end-to-end**. In line with the stricter
@@ -212,8 +220,8 @@ milestone on top of the 1.0 baseline that was developed in private.
 - **`tests/`** directory with headless GUI tests
   (`QT_QPA_PLATFORM=offscreen`) and `test_v11_e2e.sh` end-to-end
   security validation script (7 indicators).
-- **Third-party license disclosure**: `THIRD_PARTY_LICENSES.md` for
-  PySide6 / Qt LGPL compliance.
+- **Third-party license disclosure**: `THIRD_PARTY_LICENSES.md` /
+  `THIRD_PARTY_LICENSES.zh.md` for PySide6 / Qt LGPL compliance.
 - **MIT License** file (`LICENSE`).
 
 ### Security

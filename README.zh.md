@@ -267,7 +267,7 @@ Qt 是 The Qt Company Ltd. 的商标；`cmdseal` 与 The Qt Company
 无附属关系，也未获其背书。
 
 完整的第三方组件清单和 LGPL 合规说明见
-[`THIRD_PARTY_LICENSES.md`](./THIRD_PARTY_LICENSES.md)。
+[`THIRD_PARTY_LICENSES.zh.md`](./THIRD_PARTY_LICENSES.zh.md)。
 
 ## 相关
 
