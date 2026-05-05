@@ -437,7 +437,7 @@ class _EditTemplateDialog(QDialog):
                  old_template: str, output_path: str, service: str) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"修改模板 — {label}")
-        self.resize(640, 320)
+        self.resize(840, 320)
 
         info = QLabel(
             f"label   : {label}\n"
