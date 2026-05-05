@@ -10,6 +10,56 @@ on the `cmdseal` (CLI + runner) surface. The `cmdseal-gui` PySide6
 front-end package in [`pyproject.toml`](./pyproject.toml) carries its
 own independent version number and is not required to stay in lock-step.
 
+## [1.2.0] - Unreleased
+
+Pipe-support release. Adds multi-segment pipelines to sealed binaries
+while preserving the v1.1 security model (no shell at runtime, absolute
+paths, `DYLD_*` stripped, hardened runtime). Design: [research/DESIGN.pipe.md](./research/DESIGN.pipe.md).
+
+### Added
+
+- **Multi-segment `--command`.** `cmdseal seal` now accepts the flag
+  multiple times to build a `cmd_A | cmd_B | ... | cmd_N` pipeline
+  (up to 8 segments). `{{arg:N}}` placeholders are globally numbered
+  across all segments so the caller still sees a single positional
+  argument list.
+- **In-runner pipeline execution.** The generated runner implements
+  its own `pipe()`+`fork()`+`dup2()` dispatcher in C (see
+  `run_pipeline()` in `runner_aead_template.c`). **No shell is ever
+  invoked at runtime**; each segment still runs through `execv()` and
+  inherits the v1.1 hardening (absolute-path check, `DYLD_*` /
+  `LD_*` stripped before fork).
+- **pipefail-equivalent exit semantics.** If any segment exits
+  non-zero, the sealed binary exits with the **left-most** failing
+  code; all segments still run to completion, mirroring
+  `set -o pipefail` in shells. Safety tools should fail loudly.
+- **Byte-level v1.1 compatibility.** A single `--command` produces
+  a plaintext blob byte-identical to v1.1 and takes the no-`fork`
+  fast path in the runner. Zero regression risk for existing users.
+- **Tests.** New `tests/test_pipe_serialize.py` (pure-Python,
+  CI-friendly; 12 cases covering byte layout, v1.1 compat,
+  cross-segment `{{arg:N}}`) and `tests/test_v12_pipe_e2e.sh`
+  (interactive e2e; 7 cases covering single-/two-/three-segment
+  pipelines and the full exit-code matrix).
+
+### Security
+
+- Pipe functionality is implemented entirely in the runner's C code.
+  Shell metacharacters in user-supplied `{{arg:N}}` values (`;`,
+  `$(...)`, backticks, `>`, etc.) remain **inert** because nothing
+  ever passes through `/bin/sh` — they are only byte strings inside
+  a specific segment's `argv` slot.
+
+### Known non-goals (v1.2)
+
+- No shell redirection (`>`, `<`), chaining (`&&`, `||`, `;`),
+  stderr merging (`2>&1`), variable/command substitution, or glob
+  expansion. These are **permanently rejected** because they would
+  re-open the injection surface that the pipe design deliberately
+  avoids.
+- GUI support for composing multi-segment templates is deferred to
+  v1.2.1 and tracked separately.
+
 ## [1.1.0] - Unreleased
 
 First public open-source release. Version 1.1 is a security-hardening
@@ -99,4 +149,5 @@ Initial private baseline — included here for historical context only.
 - First-cut PySide6 GUI with a seal wizard.
 - PyInstaller `.app` packaging pipeline.
 
+[1.2.0]: https://github.com/szgenle/cmdseal/releases/tag/v1.2.0
 [1.1.0]: https://github.com/szgenle/cmdseal/releases/tag/v1.1.0

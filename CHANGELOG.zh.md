@@ -10,6 +10,47 @@
 [`pyproject.toml`](./pyproject.toml) 中的 `cmdseal-gui`（PySide6
 前端包）拥有独立的版本号，不需要与之保持同步。
 
+## [1.2.0] - 未发布
+
+管道支持版本。在保留 v1.1 全部安全模型（运行时完全不经 shell、
+绝对路径、剥离 `DYLD_*`、hardened runtime）的前提下，为 sealed 二进制
+新增多段管道能力。设计文档：[research/DESIGN.pipe.md](./research/DESIGN.pipe.md)。
+
+### 新增
+
+- **多段 `--command`。** `cmdseal seal` 现在允许多次传入该参数，
+  组装成 `cmd_A | cmd_B | ... | cmd_N` 的管道（最多 8 段）。
+  `{{arg:N}}` 占位符跨段**全局连续编号**，调用方仍然只看到一份位置
+  参数列表。
+- **runner 内置管道执行器。** 生成的 runner 在 C 代码里用
+  `pipe()`+`fork()`+`dup2()` 自建调度（见 `runner_aead_template.c`
+  中的 `run_pipeline()`）。**运行时完全不调用 shell**；每段仍走
+  `execv()`，并继承 v1.1 的安全加固（绝对路径校验、fork 前剥离
+  `DYLD_*` / `LD_*`）。
+- **pipefail 等价退出码语义。** 任一段非零退出，sealed 二进制
+  便以**最左侧**失败段的退出码退出；后续段仍会执行完毕，与 shell 的
+  `set -o pipefail` 一致。安全工具应当大声失败。
+- **v1.1 字节级兼容。** 单个 `--command` 产出的明文 blob 与 v1.1
+  字节一致，runner 走不 `fork` 的快路径。现有用户零回归风险。
+- **测试。** 新增 `tests/test_pipe_serialize.py`（纯 Python，CI 友好；
+  12 个 case 覆盖字节布局、v1.1 兼容、跨段 `{{arg:N}}`）与
+  `tests/test_v12_pipe_e2e.sh`（交互式 e2e；7 个 case 覆盖单/双/三段
+  管道及完整退出码矩阵）。
+
+### 安全
+
+- 管道功能完全由 runner 的 C 代码实现。用户在 `{{arg:N}}` 值里注入的
+  任何 shell 元字符（`;`、`$(...)`、反引号、`>` 等）仍然**无效**，
+  因为运行时没有任何字符串会经过 `/bin/sh` —— 它们只是某一段 `argv`
+  槽位里的字节串。
+
+### 明确不做（v1.2）
+
+- 不支持 shell 重定向（`>`、`<`）、逻辑串联（`&&`、`||`、`;`）、
+  stderr 合并（`2>&1`）、变量/命令替换、glob 展开。这些特性**永久
+  拒绝**，因为它们会重新打开管道设计刻意规避的注入面。
+- 多段模板的 GUI 可视化编辑推迟到 v1.2.1，独立跟踪。
+
 ## [1.1.0] - 未发布
 
 首个公开开源发布。v1.1 是在 v1.0 私有基线之上的一次安全加固
@@ -93,4 +134,5 @@
 - 首版 PySide6 GUI 及 seal 向导。
 - 基于 PyInstaller 的 `.app` 打包流水线。
 
+[1.2.0]: https://github.com/szgenle/cmdseal/releases/tag/v1.2.0
 [1.1.0]: https://github.com/szgenle/cmdseal/releases/tag/v1.1.0

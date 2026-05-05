@@ -360,7 +360,7 @@ python3 cmdseal.py seal \
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `--command` | ✅ | Command template (may contain placeholders). |
+| `--command` | ✅ | Command template (may contain placeholders). **May be passed multiple times** to build a pipeline (v1.2). |
 | `--output` | ✅ | Path of the output binary. |
 | `--label` | ❌ | Friendly label (default: output filename). |
 | `--user` | ❌ | Keychain owner (default: current user). |
@@ -386,6 +386,19 @@ python3 cmdseal.py seal \
     --command 'my-command {{arg:1}}' \
     --output ./my_runner \
     --sign "Developer ID Application: Your Name (TEAM_ID)"
+
+# Example 4: Multi-segment pipeline (v1.2) — stdout→stdin between
+# segments. Pass --command once per segment (up to 8 segments). The
+# runner implements the pipeline in C — no shell is ever involved.
+# {{arg:N}} numbering is global across all segments.
+python3 cmdseal.py seal \
+    --command '/usr/local/bin/zhmm_cmd -s {{arg:1}} --once' \
+    --command '/usr/bin/zip query_result.zip -' \
+    --output ./zhmm_pack
+
+# The sealed binary exits with the LEFT-MOST failing segment's code
+# (pipefail-equivalent). All segments still run to completion.
+./zhmm_pack csj
 ```
 
 ---

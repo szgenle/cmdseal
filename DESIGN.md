@@ -147,6 +147,31 @@ The sealed command is expected to write an **encrypted artifact** (e.g.
 line to stdout. The AI agent forwards the artifact as-is; the plaintext
 never appears in stdout, logs, or network frames.
 
+### 4.6 Pipe execution (v1.2)
+
+A sealed binary may contain **1..N segments** joined by stdout→stdin
+pipes (hard cap: 8 segments). The pipeline is executed by the runner's
+own C code — `pipe()`+`fork()`+`dup2()`+`waitpid()` — **never** by
+`/bin/sh`. Each segment still runs through `execv()` and still passes
+the v1.1 hardening checks (absolute-path requirement, `DYLD_*` / `LD_*`
+stripped before fork).
+
+Consequences:
+
+- Shell metacharacters in `{{arg:N}}` values (`;`, `|`, `$(...)`,
+  backticks, `>`, etc.) remain **inert**. They are byte strings in a
+  specific segment's `argv` slot — no shell ever parses them.
+- Exit-code semantics are **pipefail-equivalent**: if any segment
+  exits non-zero, the sealed binary exits with the **left-most**
+  failing code. All segments still run to completion, matching
+  `set -o pipefail` in bash/zsh. Safety tools should fail loudly.
+- Single-segment sealed binaries take a **no-`fork` fast path**. The
+  plaintext blob format is byte-identical to v1.1, so existing
+  binaries see zero regression.
+
+See [research/DESIGN.pipe.md](./research/DESIGN.pipe.md) for the full
+format (`TOK_PIPE = 0x03` separator) and pseudocode.
+
 ---
 
 ## 5. Placeholder language (v1)
@@ -158,6 +183,12 @@ A command template is a single shell-like string, tokenized by `shlex`:
 | `{{secret:NAME}}`   | Runtime      | Keychain `cmdseal.<hash>.NAME`       |
 | `{{arg:N}}`         | Runtime      | `argv[N]` of the generated binary    |
 | literal token       | —            | used as-is                           |
+
+> **Pipe scoping (v1.2).** When the sealed binary is a multi-segment
+> pipeline, `{{arg:N}}` numbering is **global** — the same `argv[N]`
+> can be referenced from any segment, and numbering stays continuous
+> across segments. Literal tokens remain local to the segment that
+> contains them.
 
 Example:
 

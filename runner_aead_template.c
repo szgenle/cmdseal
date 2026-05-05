@@ -34,6 +34,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <crt_externs.h>   /* _NSGetEnviron on macOS */
 #include <Security/Security.h>
 #include <CommonCrypto/CommonCryptor.h>
@@ -82,7 +85,12 @@ static const unsigned char TAG[] = /* @@TAG@@ */ {
  * END generator-filled section
  * ============================================================ */
 
-#define TOK_ARG 0x02
+#define TOK_ARG  0x02
+#define TOK_PIPE 0x03
+
+/* v1.2: hard cap on pipeline depth. Must match MAX_PIPE_SEGMENTS
+ * in cmdseal.py. See research/DESIGN.pipe.md §2.4. */
+#define MAX_PIPE_SEGMENTS 8
 
 static void die(const char *msg, int rc) {
     fprintf(stderr, "cmdseal: %s\n", msg);
@@ -188,6 +196,93 @@ static char *fetch_key_hex(UInt32 *out_len) {
     return buf;
 }
 
+/* v1.2: run a pipeline of `nsegs` segments. Each segment is a
+ * NULL-terminated argv slice. stdout of segment i is wired to stdin
+ * of segment i+1 via pipe(); stderr is inherited from the sealed
+ * binary (matches shell default).
+ *
+ * Exit-code policy: first-failure-wins (pipefail-equivalent).
+ * If any segment exits non-zero, the sealed binary exits with the
+ * LEFTMOST failing code; all segments still run to completion.
+ *
+ * See research/DESIGN.pipe.md §2.3 and §4.
+ */
+static int run_pipeline(char **seg_argv[], size_t nsegs) {
+    pid_t pids[MAX_PIPE_SEGMENTS];
+    int prev_read = -1;
+
+    for (size_t i = 0; i < nsegs; i++) {
+        int pipefd[2] = {-1, -1};
+        int has_next = (i + 1 < nsegs);
+
+        if (has_next) {
+            if (pipe(pipefd) != 0) {
+                fprintf(stderr, "cmdseal: pipe() failed: %s\n",
+                        strerror(errno));
+                if (prev_read != -1) close(prev_read);
+                return 2;
+            }
+        }
+
+        pid_t pid = fork();
+        if (pid < 0) {
+            fprintf(stderr, "cmdseal: fork() failed: %s\n",
+                    strerror(errno));
+            if (prev_read != -1) close(prev_read);
+            if (has_next) { close(pipefd[0]); close(pipefd[1]); }
+            return 2;
+        }
+
+        if (pid == 0) {
+            /* child */
+            /* Restore SIGPIPE to default so that a downstream stage
+             * closing its stdin (e.g. `head`) kills the upstream
+             * producer — same behaviour as a shell pipeline. */
+            signal(SIGPIPE, SIG_DFL);
+
+            if (prev_read != -1) {
+                if (dup2(prev_read, STDIN_FILENO) < 0) _exit(2);
+                close(prev_read);
+            }
+            if (has_next) {
+                close(pipefd[0]);
+                if (dup2(pipefd[1], STDOUT_FILENO) < 0) _exit(2);
+                close(pipefd[1]);
+            }
+
+            execv(seg_argv[i][0], seg_argv[i]);
+            fprintf(stderr, "cmdseal: execv('%s') failed: %s\n",
+                    seg_argv[i][0], strerror(errno));
+            _exit(127);
+        }
+
+        /* parent */
+        pids[i] = pid;
+        if (prev_read != -1) close(prev_read);
+        if (has_next) {
+            close(pipefd[1]);
+            prev_read = pipefd[0];
+        } else {
+            prev_read = -1;
+        }
+    }
+
+    /* Wait all; first-failure-wins. */
+    int first_fail = 0;
+    for (size_t i = 0; i < nsegs; i++) {
+        int st = 0;
+        if (waitpid(pids[i], &st, 0) < 0) {
+            if (first_fail == 0) first_fail = 2;
+            continue;
+        }
+        int code = WIFEXITED(st) ? WEXITSTATUS(st)
+                 : WIFSIGNALED(st) ? (128 + WTERMSIG(st))
+                 : 1;
+        if (code != 0 && first_fail == 0) first_fail = code;
+    }
+    return first_fail;
+}
+
 int main(int argc, char *argv[]) {
     (void)LABEL;
 
@@ -238,20 +333,38 @@ int main(int argc, char *argv[]) {
     pt[CIPHERTEXT_LEN] = '\0';
 
     /* 3. Parse tokens: sequence of NUL-terminated C strings, ending
-     *    with an empty string. */
-    size_t ntok = 0;
+     *    with an empty string. v1.2 introduces the one-byte TOK_PIPE
+     *    separator (\x03) between pipeline segments. When no TOK_PIPE
+     *    is present the layout is byte-identical to v1.1 and the code
+     *    below collapses to the single-segment fast path. */
+    size_t total_slots = 0;   /* non-pipe tokens */
+    size_t nsegs       = 1;   /* at least one segment */
     {
         size_t i = 0;
         while (i < CIPHERTEXT_LEN && pt[i] != '\0') {
             size_t l = strlen((char *)(pt + i));
-            ntok++;
+            if (l == 1 && (unsigned char)pt[i] == TOK_PIPE) {
+                nsegs++;
+                if (nsegs > MAX_PIPE_SEGMENTS) {
+                    die("too many pipe segments (generator bug?)", 2);
+                }
+            } else {
+                total_slots++;
+            }
             i += l + 1;
         }
     }
-    if (ntok == 0) die("empty command (generator bug)", 2);
+    if (total_slots == 0) die("empty command (generator bug)", 2);
 
-    char **out_argv = (char **)calloc(ntok + 1, sizeof(char *));
+    /* Allocate one flat argv with room for: every real token, plus
+     * one NULL terminator per segment. seg_argv[s] points into this
+     * flat buffer at the start of segment s. */
+    char **out_argv = (char **)calloc(total_slots + nsegs, sizeof(char *));
     if (!out_argv) die("out of memory", 2);
+
+    char **seg_argv[MAX_PIPE_SEGMENTS];
+    size_t seg_count = 0;
+    seg_argv[0] = out_argv;
 
     {
         size_t i = 0, idx = 0;
@@ -259,8 +372,13 @@ int main(int argc, char *argv[]) {
             char *t = (char *)(pt + i);
             size_t l = strlen(t);
 
-            if ((unsigned char)t[0] == TOK_ARG) {
-                /* "\x02arg:N" */
+            if (l == 1 && (unsigned char)t[0] == TOK_PIPE) {
+                /* Close current segment and start the next one. */
+                out_argv[idx++] = NULL;
+                seg_count++;
+                seg_argv[seg_count] = &out_argv[idx];
+            } else if ((unsigned char)t[0] == TOK_ARG) {
+                /* "\x02arg:N" — substitute argv[N] of this binary. */
                 const char *p = t + 1;
                 if (strncmp(p, "arg:", 4) == 0) p += 4;
                 long argidx = strtol(p, NULL, 10);
@@ -278,29 +396,37 @@ int main(int argc, char *argv[]) {
             }
             i += l + 1;
         }
-        out_argv[idx] = NULL;
+        out_argv[idx] = NULL;   /* final terminator for last segment */
+        seg_count++;
     }
 
-    if (!out_argv[0] || !*out_argv[0]) die("empty program name", 2);
-
-    /* v1.1 #2: refuse PATH-based lookup. The first token must be an
-     * absolute path so we know EXACTLY which binary runs. cmdseal.py
-     * resolves non-absolute program names via shutil.which() at seal
-     * time, so reaching here with a relative path means the sealed
-     * blob was hand-crafted or the generator is older than v1.1. */
-    if (out_argv[0][0] != '/') {
-        fprintf(stderr,
-            "cmdseal: sealed command's program is not an absolute "
-            "path (got '%s'). Rerun cmdseal seal with a v1.1+ "
-            "generator so the absolute path is baked in.\n",
-            out_argv[0]);
-        return 126;
+    /* v1.1 #2 carried through to every segment: refuse PATH-based
+     * lookup. First token of EACH segment must be an absolute path.
+     * Checked in parent before any fork so the whole pipeline fails
+     * cleanly without partial side-effects. */
+    for (size_t s = 0; s < seg_count; s++) {
+        if (!seg_argv[s][0] || !*seg_argv[s][0]) {
+            die("empty program name in pipeline segment", 2);
+        }
+        if (seg_argv[s][0][0] != '/') {
+            fprintf(stderr,
+                "cmdseal: sealed command's program is not an absolute "
+                "path (segment %zu: '%s'). Rerun cmdseal seal with a "
+                "v1.1+ generator so the absolute path is baked in.\n",
+                s + 1, seg_argv[s][0]);
+            return 126;
+        }
     }
 
     /* 4. Go. (pt stays allocated — out_argv points into it.) */
-    execv(out_argv[0], out_argv);
+    if (seg_count == 1) {
+        /* Fast path: single segment, no fork — identical to v1.1. */
+        execv(seg_argv[0][0], seg_argv[0]);
+        fprintf(stderr, "cmdseal: execv('%s') failed: %s\n",
+                seg_argv[0][0], strerror(errno));
+        return 127;
+    }
 
-    fprintf(stderr, "cmdseal: execv('%s') failed: %s\n",
-            out_argv[0], strerror(errno));
-    return 127;
+    /* Slow path: stdout→stdin pipeline across seg_count stages. */
+    return run_pipeline(seg_argv, seg_count);
 }

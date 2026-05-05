@@ -68,6 +68,11 @@ HELPER_BIN      = HELPER_BIN_DIR / "cmdseal_helper"
 PLACEHOLDER_RE = re.compile(r"\{\{(secret|arg):([A-Za-z0-9_]+)\}\}")
 SERVICE_RE     = re.compile(r"cmdseal\.[a-f0-9]{12}\.K")
 
+# v1.2: inter-segment pipe separator token. Must match TOK_PIPE in
+# runner_aead_template.c. See research/DESIGN.pipe.md §3.
+TOK_PIPE_BYTE     = b"\x03"
+MAX_PIPE_SEGMENTS = 8
+
 
 # ----------------------------------------------------------------------
 # Helpers
@@ -195,22 +200,37 @@ def resolve_program_path(tokens):
 # Plaintext serialisation: NUL-terminated C strings, empty string = end
 # ----------------------------------------------------------------------
 
-def serialize_tokens(tokens, secret_values):
-    """Build the plaintext blob the runner will walk at execvp() time."""
+def serialize_segments(segments, secret_values):
+    """Build the plaintext blob the runner will walk at exec time.
+
+    `segments` is a list of 1..N token lists (one per pipeline stage,
+    upstream first). When N == 1 the output is BYTE-IDENTICAL to the
+    v1.1 layout (no \x03 separator token anywhere), so existing
+    callers see zero format regression.
+
+    For N >= 2, a single-byte \x03 token is inserted between segments.
+    See research/DESIGN.pipe.md §3.
+    """
     parts = []
-    for kind, payload in tokens:
-        if kind == "literal":
-            parts.append(payload.encode("utf-8"))
-        elif kind == "secret":
-            # Secrets are substituted in as literals at generation time.
-            # Plan D keeps exactly ONE keychain item (for K), not one
-            # per secret.
-            parts.append(secret_values[payload].encode("utf-8"))
-        elif kind == "arg":
-            # "\x02arg:N" — runtime token resolved by the runner.
-            parts.append(b"\x02arg:" + payload.encode("utf-8"))
-        else:
-            raise AssertionError(kind)
+    for si, tokens in enumerate(segments):
+        if si > 0:
+            # Inter-segment separator. Rendered as the one-byte token
+            # "\x03" — distinct from any shlex-produced literal and
+            # from the \x02arg prefix.
+            parts.append(TOK_PIPE_BYTE)
+        for kind, payload in tokens:
+            if kind == "literal":
+                parts.append(payload.encode("utf-8"))
+            elif kind == "secret":
+                # Secrets are substituted in as literals at generation
+                # time. Plan D keeps exactly ONE keychain item (for
+                # K), not one per secret.
+                parts.append(secret_values[payload].encode("utf-8"))
+            elif kind == "arg":
+                # "\x02arg:N" — runtime token resolved by the runner.
+                parts.append(b"\x02arg:" + payload.encode("utf-8"))
+            else:
+                raise AssertionError(kind)
     # Tokens are NUL-separated; an extra empty NUL marks end of list.
     blob = b"\x00".join(parts) + b"\x00" + b"\x00"
     # Sanity: tokens must not contain raw NULs themselves.
@@ -528,11 +548,32 @@ def do_seal(args, *, old_service_to_delete=None):
     if not template_path.is_file():
         sys.exit(f"cmdseal: template not found: {template_path}")
 
-    # 1. Tokenise + gather secrets.
-    tokens = tokenize_command(args.command)
-    # v1.1 #2: resolve non-absolute program name at seal time.
-    tokens = resolve_program_path(tokens)
-    secret_names = sorted({payload for kind, payload in tokens
+    # 1. Tokenise each segment + gather secrets.
+    #    v1.2: --command is action="append", so args.command is a list
+    #    of 1..N shell-like strings forming a stdout→stdin pipeline.
+    commands = args.command
+    if not commands:
+        sys.exit("cmdseal: --command is required")
+    if len(commands) > MAX_PIPE_SEGMENTS:
+        sys.exit(
+            f"cmdseal: too many --command segments "
+            f"({len(commands)}); max is {MAX_PIPE_SEGMENTS}"
+        )
+
+    segments = []
+    for cmd_str in commands:
+        toks = tokenize_command(cmd_str)
+        # v1.1 #2: resolve non-absolute program name at seal time
+        # (applies per segment — every stage must have an absolute
+        # path baked in, so the runner never does PATH lookup).
+        toks = resolve_program_path(toks)
+        segments.append(toks)
+
+    # Secrets and positional args are collected ACROSS segments:
+    # {{arg:N}} numbering is global (see DESIGN.pipe.md §2.2).
+    secret_names = sorted({payload
+                           for seg in segments
+                           for kind, payload in seg
                            if kind == "secret"})
     secret_values = collect_secrets(secret_names, args.secrets_from_stdin)
 
@@ -544,7 +585,7 @@ def do_seal(args, *, old_service_to_delete=None):
     label = args.label or f"cmdseal sealed: {output_path.name}"
 
     # 3. Serialise + encrypt.
-    plaintext = serialize_tokens(tokens, secret_values)
+    plaintext = serialize_segments(segments, secret_values)
     # Defensive: wipe secret_values from memory.
     secret_values.clear()
 
@@ -586,19 +627,29 @@ def do_seal(args, *, old_service_to_delete=None):
     #    dialog (NEXT.md §5.19) — the GUI uses it to enumerate
     #    sealed runners with zero popups. It does NOT contain K, the
     #    secret values, or any AEAD material.
-    positional_args = sorted({int(payload) for kind, payload in tokens
+    positional_args = sorted({int(payload)
+                              for seg in segments
+                              for kind, payload in seg
                               if kind == "arg"})
     arity = max(positional_args) if positional_args else 0
+    # Human-readable template string ("cmd1 | cmd2 | cmd3"). For
+    # multi-segment runners we ALSO emit a structured `segments` list
+    # so GUI / audit tools can round-trip the pipeline unambiguously
+    # (a literal '|' inside a segment is otherwise indistinguishable
+    # from the pipe operator in the joined string).
+    template_display = " | ".join(commands)
     comment_payload = {
         "v": 1,
         "label": label,
-        "template": args.command,
+        "template": template_display,
         "output_path": str(output_path),
         "arity": arity,
         "secret_names": secret_names,
         "created_at": datetime.datetime.now(
             datetime.timezone.utc).isoformat(timespec="seconds"),
     }
+    if len(commands) > 1:
+        comment_payload["segments"] = list(commands)
     comment_json = json.dumps(comment_payload,
                               ensure_ascii=False, separators=(",", ":"))
 
@@ -727,8 +778,15 @@ def do_delete(args):
 # ----------------------------------------------------------------------
 
 def add_common_seal_args(p):
-    p.add_argument("--command", required=True,
-                   help="command template (shell-quoted string)")
+    # v1.2: action="append" — pass --command multiple times to form a
+    # stdout→stdin pipeline. A single --command keeps v1.1 semantics
+    # and produces a byte-identical plaintext layout.
+    p.add_argument("--command", required=True, action="append",
+                   metavar="CMD",
+                   help="command template (shell-quoted string). "
+                        "Pass multiple times to form a pipeline: "
+                        "cmd1 | cmd2 | ... (max "
+                        f"{MAX_PIPE_SEGMENTS} segments).")
     p.add_argument("--output", required=True,
                    help="path to write the generated binary")
     p.add_argument("--template", default=str(DEFAULT_TEMPLATE),

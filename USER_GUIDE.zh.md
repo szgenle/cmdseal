@@ -360,7 +360,7 @@ python3 cmdseal.py seal \
 
 | 参数 | 必填 | 说明 |
 |------|------|------|
-| `--command` | ✅ | 命令模板（含占位符） |
+| `--command` | ✅ | 命令模板（含占位符）。**可多次传入**，用于组装管道（v1.2）。 |
 | `--output` | ✅ | 输出二进制路径 |
 | `--label` | ❌ | 标签名（默认：输出文件名） |
 | `--user` | ❌ | Keychain 所有者（默认：当前用户） |
@@ -386,6 +386,18 @@ python3 cmdseal.py seal \
     --command 'my-command {{arg:1}}' \
     --output ./my_runner \
     --sign "Developer ID Application: Your Name (TEAM_ID)"
+
+# 示例 4：多段管道（v1.2）—— 段与段之间以 stdout→stdin 相连。
+# 每一段传一次 --command（最多 8 段）。管道由 runner 的 C 代码
+# 实现，运行时完全不调用 shell。{{arg:N}} 编号跨段全局连续。
+python3 cmdseal.py seal \
+    --command '/usr/local/bin/zhmm_cmd -s {{arg:1}} --once' \
+    --command '/usr/bin/zip query_result.zip -' \
+    --output ./zhmm_pack
+
+# sealed 二进制以**最左侧**失败段的退出码退出（pipefail 等价）；
+# 后续段仍会执行完毕。
+./zhmm_pack csj
 ```
 
 ---

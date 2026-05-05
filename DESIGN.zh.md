@@ -142,6 +142,28 @@ code requirement**，而不仅仅是它的路径。ad-hoc 签名把身份钉死�
 一个文件路径，stdout 只打印一行简短的成功信息。AI 智能体把这个产物
 原样转发；明文永远不会出现在 stdout、日志或网络数据包里。
 
+### 4.6 管道执行（v1.2）
+
+sealed 二进制可以包含 **1..N 段**（硬上限 8 段）由 stdout→stdin
+连接的管道。整条管道由 runner 自己的 C 代码调度 —— `pipe()`+
+`fork()`+`dup2()`+`waitpid()` —— **从不**经过 `/bin/sh`。每段仍走
+`execv()`，并且仍然需要通过 v1.1 的安全加固检查（首 token 必须是
+绝对路径、fork 前剥离 `DYLD_*` / `LD_*`）。
+
+随之而来的性质：
+
+- `{{arg:N}}` 值里的 shell 元字符（`;`、`|`、`$(...)`、反引号、`>`
+  等）仍然**无效**。它们只是某一段 `argv` 槽位里的字节串，没有任何
+  shell 会对它们做解析。
+- 退出码语义为 **pipefail 等价**：任一段非零退出，sealed 二进制便以
+  **最左侧**失败段的退出码退出。后续段仍会执行完毕，与 bash/zsh 的
+  `set -o pipefail` 一致。安全工具应当大声失败。
+- 单段 sealed 二进制走**不 `fork` 的快路径**，明文 blob 格式与 v1.1
+  字节一致，已有二进制零回归。
+
+完整格式（`TOK_PIPE = 0x03` 分隔符）和伪代码见
+[research/DESIGN.pipe.md](./research/DESIGN.pipe.md)。
+
 ---
 
 ## 5. 占位符语法（v1）
@@ -153,6 +175,10 @@ code requirement**，而不仅仅是它的路径。ad-hoc 签名把身份钉死�
 | `{{secret:NAME}}`   | 运行时   | Keychain 中的 `cmdseal.<hash>.NAME`     |
 | `{{arg:N}}`         | 运行时   | 生成二进制的 `argv[N]`                  |
 | 普通字面 token      | —        | 原样使用                                |
+
+> **管道作用域（v1.2）。** 当 sealed 二进制是多段管道时，`{{arg:N}}`
+> 的编号是**全局的** —— 同一个 `argv[N]` 可以在任意一段中被引用，
+> 且编号跨段保持连续。字面 token 的作用域仍仅限于它所在的那一段。
 
 示例：
 
