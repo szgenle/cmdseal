@@ -27,8 +27,8 @@ class ExecutionPage(QWizardPage):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setTitle("生成封装")
-        self.setSubTitle("点击「运行」，cmdseal.py 将在子进程中构建并签名二进制。")
+        self.setTitle(self.tr("Generate Sealed Binary"))
+        self.setSubTitle(self.tr("Click “Run”; cmdseal.py will build and sign the binary in a subprocess."))
         self.setCommitPage(True)
 
         self._proc: QProcess | None = None
@@ -47,14 +47,14 @@ class ExecutionPage(QWizardPage):
         self.log.setFont(mono)
         self.log.setMaximumBlockCount(20000)
 
-        self.run_btn = QPushButton("运行生成")
+        self.run_btn = QPushButton(self.tr("Run Generation"))
         self.run_btn.clicked.connect(self._run)
 
         lay = QVBoxLayout(self)
-        lay.addWidget(QLabel("配置预览："))
+        lay.addWidget(QLabel(self.tr("Configuration preview:")))
         lay.addWidget(self.preview)
         lay.addWidget(self.run_btn)
-        lay.addWidget(QLabel("日志："))
+        lay.addWidget(QLabel(self.tr("Log:")))
         lay.addWidget(self.log, 1)
 
     def initializePage(self) -> None:
@@ -70,15 +70,15 @@ class ExecutionPage(QWizardPage):
             pass
         lines: list[str] = []
         if len(req.commands) == 1:
-            lines.append(f"模板    : {req.commands[0]}")
+            lines.append(self.tr("Template  : {t}").format(t=req.commands[0]))
         else:
             for i, seg in enumerate(req.commands):
-                lines.append(f"模板段{i + 1}  : {seg}")
+                lines.append(self.tr("Template #{i}: {t}").format(i=i + 1, t=seg))
         lines += [
-            f"输出    : {req.output}",
-            f"label   : {req.label or '(auto)'}",
-            f"用户    : {req.user}",
-            f"签名    : ad-hoc",
+            self.tr("Output    : {p}").format(p=req.output),
+            self.tr("Label     : {l}").format(l=req.label or self.tr("(auto)")),
+            self.tr("User      : {u}").format(u=req.user),
+            self.tr("Signing   : ad-hoc"),
         ]
         self.preview.setPlainText("\n".join(lines))
         self.log.clear()
@@ -126,7 +126,7 @@ class ExecutionPage(QWizardPage):
             self._proc = proc
             proc.start(argv[0], argv[1:])
             if not proc.waitForStarted(3000):
-                self.log.appendPlainText("⚠ 子进程启动失败")
+                self.log.appendPlainText(self.tr("⚠ Child process failed to start"))
                 self._proc = None
                 self.run_btn.setEnabled(True)
                 return
@@ -134,7 +134,7 @@ class ExecutionPage(QWizardPage):
             proc.closeWriteChannel()
         except Exception as e:
             import traceback
-            self.log.appendPlainText(f"⚠ 异常：{e}\n{traceback.format_exc()}")
+            self.log.appendPlainText(self.tr("⚠ Exception: {e}\n{tb}").format(e=e, tb=traceback.format_exc()))
             self._proc = None
             self.run_btn.setEnabled(True)
 
@@ -146,7 +146,7 @@ class ExecutionPage(QWizardPage):
             self.log.appendPlainText(data.rstrip("\n"))
 
     def _on_error(self, err: QProcess.ProcessError) -> None:
-        self.log.appendPlainText(f"⚠ QProcess 错误：{err}")
+        self.log.appendPlainText(self.tr("⚠ QProcess error: {err}").format(err=err))
 
     def _on_finished(self, code: int, status: QProcess.ExitStatus) -> None:
         self._on_stdout()

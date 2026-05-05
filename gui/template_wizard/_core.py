@@ -10,6 +10,16 @@ import shlex
 import shutil
 from pathlib import Path
 
+from PySide6.QtCore import QCoreApplication
+
+
+def _tr(msg: str) -> str:
+    """在非 QObject 纯函数中做 i18n：走 QCoreApplication.translate
+    静态 source（英文）会被 pyside6-lupdate 扫到。没有 QApplication
+    实例时（单测直调）Qt 会直接返回原英文，无副作用。
+    """
+    return QCoreApplication.translate("TemplateCore", msg)
+
 
 #: 默认输出目录：用户专属，避免 /usr/local/bin 的 sudo 依赖
 DEFAULT_OUTPUT_DIR = Path.home() / "cmdseal" / "bin"
@@ -41,26 +51,26 @@ def validate_command(cmd: str) -> tuple[bool, str, list[str]]:
     """
     cmd = cmd.strip()
     if not cmd:
-        return False, "命令为空", []
+        return False, _tr("Command is empty"), []
     try:
         tokens = shlex.split(cmd)
     except ValueError as e:
-        return False, f"命令解析失败：{e}", []
+        return False, _tr("Failed to parse command: {err}").format(err=e), []
     if not tokens:
-        return False, "命令为空", []
+        return False, _tr("Command is empty"), []
 
     program = tokens[0]
     if program.startswith(("/", "~", ".")):
         resolved = Path(program).expanduser()
         if not resolved.is_file():
-            return False, f"程序不存在：{program}", tokens
+            return False, _tr("Program does not exist: {program}").format(program=program), tokens
         if not os.access(resolved, os.X_OK):
-            return False, f"程序不可执行：{program}", tokens
+            return False, _tr("Program not executable: {program}").format(program=program), tokens
     else:
         if not shutil.which(program):
-            return False, f"在 PATH 中找不到：{program}", tokens
+            return False, _tr("Not found in PATH: {program}").format(program=program), tokens
 
-    return True, f"语法合法（{len(tokens)} 个 tokens）", tokens
+    return True, _tr("Syntax OK ({n} tokens)").format(n=len(tokens)), tokens
 
 
 def build_template(tokens: list[str], selected: set[int]) -> str:

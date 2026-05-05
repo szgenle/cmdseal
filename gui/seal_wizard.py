@@ -124,7 +124,7 @@ class _SegmentEditor(QWidget):
 
         self._remove_btn = QPushButton("×")
         self._remove_btn.setFixedWidth(28)
-        self._remove_btn.setToolTip("删除该段")
+        self._remove_btn.setToolTip(self.tr("Remove this segment"))
         self._remove_btn.setVisible(can_remove)
         self._remove_btn.clicked.connect(
             lambda: self.removeRequested.emit(self))
@@ -159,18 +159,26 @@ class _SegmentEditor(QWidget):
 
     @staticmethod
     def _title_text(index: int) -> str:
-        return f"段 {index + 1}　（第 {index + 1} 段 — 获得上一段 stdout）" \
-            if index > 0 else f"段 {index + 1}　（第一段 — 主命令）"
+        from PySide6.QtCore import QCoreApplication
+        if index > 0:
+            return QCoreApplication.translate(
+                "_SegmentEditor",
+                "Segment {i} (receives stdout of previous segment)",
+            ).format(i=index + 1)
+        return QCoreApplication.translate(
+            "_SegmentEditor",
+            "Segment {i} (first segment — main command)",
+        ).format(i=index + 1)
 
     def set_index(self, index: int, can_remove: bool) -> None:
         self._title.setText(self._title_text(index))
         self._remove_btn.setVisible(can_remove)
         if index == 0:
-            self.edit.setPlaceholderText(
-                "例如：/usr/bin/zip -j -P {{secret:pw}} {{arg:1}}")
+            self.edit.setPlaceholderText(self.tr(
+                "e.g.: /usr/bin/zip -j -P {{secret:pw}} {{arg:1}}"))
         else:
-            self.edit.setPlaceholderText(
-                "例如：/usr/bin/zip {{arg:2}} -    （‘-’ 表示读 stdin）")
+            self.edit.setPlaceholderText(self.tr(
+                "e.g.: /usr/bin/zip {{arg:2}} -    ('-' means read stdin)"))
 
     def text(self) -> str:
         return self.edit.toPlainText().strip()
@@ -186,14 +194,13 @@ class CommandPage(QWizardPage):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setTitle("命令模板")
-        self.setSubTitle(
-            "填写要密封的命令（可多段管道，最多 "
-            f"{MAX_PIPE_SEGMENTS} 段）。\n"
-            "• 可直接写字面量密码；或用 {{secret:NAME}} / {{arg:N}}\n"
-            "• 多段时，后一段的 stdin 为前一段的 stdout\n"
-            "• {{arg:N}} 编号跨段全局唯一、顺序连续传入"
-        )
+        self.setTitle(self.tr("Command Template"))
+        self.setSubTitle(self.tr(
+            "Write the command(s) to seal (up to {max} pipe segments).\n"
+            "• Literal passwords allowed; or use {{secret:NAME}} / {{arg:N}}\n"
+            "• With multiple segments, each consumes stdout of the previous segment\n"
+            "• {{arg:N}} numbers are globally unique and passed in order across all segments"
+        ).format(max=MAX_PIPE_SEGMENTS))
 
         # 段容器——用 QScrollArea 容纳任意段数
         self._segments_host = QWidget()
@@ -207,7 +214,7 @@ class CommandPage(QWizardPage):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
 
-        self._add_btn = QPushButton("➕  添加管道段")
+        self._add_btn = QPushButton(self.tr("➕  Add pipe segment"))
         self._add_btn.clicked.connect(lambda: self._add_segment())
 
         self.summary = QLabel("—")
@@ -215,10 +222,10 @@ class CommandPage(QWizardPage):
         self.summary.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         lay = QVBoxLayout(self)
-        lay.addWidget(QLabel("命令段（shell 风格，首字段建议绝对路径）："))
+        lay.addWidget(QLabel(self.tr("Command segments (shell-style; first field should be absolute path):")))
         lay.addWidget(scroll, 1)
         lay.addWidget(self._add_btn)
-        lay.addWidget(QLabel("全局解析结果："))
+        lay.addWidget(QLabel(self.tr("Global parse result:")))
         lay.addWidget(self.summary)
 
         self._segments: list[_SegmentEditor] = []
@@ -265,7 +272,7 @@ class CommandPage(QWizardPage):
             try:
                 tokens = shlex.split(cmd)
             except ValueError as e:
-                seg.set_hint(f"⚠ 无法解析 shell 引用：{e}", warn=True)
+                seg.set_hint(self.tr("⚠ Failed to parse shell quoting: {err}").format(err=e), warn=True)
                 has_error = True
                 continue
             total_tokens += len(tokens)
@@ -274,22 +281,23 @@ class CommandPage(QWizardPage):
             path_warning = ""
             if first_token and not first_token.startswith('/'):
                 if first_token.startswith('{{'):
-                    path_warning = "；⚠ 首 token 是占位符，请确保运行时传入绝对路径"
+                    path_warning = self.tr("; ⚠ First token is a placeholder; make sure to pass an absolute path at runtime")
                 else:
-                    path_warning = (
-                        f"；ℹ 首 token '{first_token}' 将在封存时解析为绝对路径")
+                    path_warning = self.tr(
+                        "; ℹ First token '{tok}' will be resolved to absolute path at seal time"
+                    ).format(tok=first_token)
 
             secs, args = _scan_placeholders(cmd)
             parts = [f"tokens={len(tokens)}"]
-            parts.append(f"secrets={', '.join(secs) or '(none)'}")
-            parts.append(f"args={', '.join(args) or '(none)'}")
+            parts.append(self.tr("secrets={v}").format(v=', '.join(secs) or self.tr('(none)')))
+            parts.append(self.tr("args={v}").format(v=', '.join(args) or self.tr('(none)')))
 
             bare_secret = re.search(r'(?<!\{)secret:[A-Za-z0-9_]+(?!\})', cmd)
             bare_arg = re.search(r'(?<!\{)arg:[0-9]+(?!\})', cmd)
             if bare_secret or bare_arg:
                 parts.insert(
                     0,
-                    "⚠ 检测到未包裹的 secret:/arg:，请用 {{secret:NAME}} 或 {{arg:N}}",
+                    self.tr("⚠ Unwrapped secret:/arg: detected; use {{secret:NAME}} or {{arg:N}}"),
                 )
                 has_error = True
             seg.set_hint(
@@ -306,9 +314,9 @@ class CommandPage(QWizardPage):
             summary_parts = [f"segments={len(cmds)}/{MAX_PIPE_SEGMENTS}"]
             summary_parts.append(f"total_tokens={total_tokens}")
             summary_parts.append(
-                f"secrets={', '.join(all_secrets) or '(none)'}")
+                self.tr("secrets={v}").format(v=', '.join(all_secrets) or self.tr('(none)')))
             summary_parts.append(
-                f"args={', '.join(all_args) or '(none)'}")
+                self.tr("args={v}").format(v=', '.join(all_args) or self.tr('(none)')))
             self.summary.setText("  ·  ".join(summary_parts))
         self.completeChanged.emit()
 
@@ -346,16 +354,16 @@ class SecretsPage(QWizardPage):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setTitle("Secret 采集")
-        self.setSubTitle(
-            "生成时一次性采集，封入 AEAD 密文；运行时不会再问。"
-        )
+        self.setTitle(self.tr("Secret Collection"))
+        self.setSubTitle(self.tr(
+            "Collected once at seal time and stored in AEAD ciphertext; never prompted again at runtime."
+        ))
 
         self._host = QWidget(self)
         self._form = QFormLayout(self._host)
         self._form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         self._inputs: dict[str, QLineEdit] = {}
-        self._empty_hint = QLabel("本次命令未使用 {{secret:*}}，直接下一步即可。")
+        self._empty_hint = QLabel(self.tr("This command uses no {{secret:*}}; simply proceed."))
         self._empty_hint.setWordWrap(True)
 
         lay = QVBoxLayout(self)
@@ -382,10 +390,10 @@ class SecretsPage(QWizardPage):
 
             edit = QLineEdit()
             edit.setEchoMode(QLineEdit.Password)
-            edit.setPlaceholderText(f"值：{name}")
+            edit.setPlaceholderText(self.tr("value: {name}").format(name=name))
             edit.textChanged.connect(self.completeChanged)
 
-            toggle = QPushButton("显示")
+            toggle = QPushButton(self.tr("Show"))
             toggle.setCheckable(True)
             toggle.setFixedWidth(56)
 
@@ -393,7 +401,7 @@ class SecretsPage(QWizardPage):
                            b: QPushButton = toggle) -> None:
                 e.setEchoMode(QLineEdit.Normal if checked
                               else QLineEdit.Password)
-                b.setText("隐藏" if checked else "显示")
+                b.setText(self.tr("Hide") if checked else self.tr("Show"))
 
             toggle.toggled.connect(_on_toggle)
 
@@ -442,8 +450,8 @@ class OptionsPage(QWizardPage):
         name_prefix: str = "seal_",
     ) -> None:
         super().__init__()
-        self.setTitle("输出与签名")
-        self.setSubTitle("选择生成路径与签名方式。ad-hoc 即 codesign -s -。")
+        self.setTitle(self.tr("Output & Signing"))
+        self.setSubTitle(self.tr("Choose the output path and signing method. ad-hoc means codesign -s -."))
 
         self._output_dir = (
             Path(output_dir).expanduser() if output_dir
@@ -455,7 +463,7 @@ class OptionsPage(QWizardPage):
         self.output_edit.setPlaceholderText(
             str(self._output_dir / f"{self._name_prefix}program")
         )
-        browse = QPushButton("浏览…")
+        browse = QPushButton(self.tr("Browse…"))
         browse.clicked.connect(self._browse)
         out_row = QWidget()
         out_lay = QHBoxLayout(out_row)
@@ -463,33 +471,33 @@ class OptionsPage(QWizardPage):
         out_lay.addWidget(self.output_edit, 1)
         out_lay.addWidget(browse)
 
-        self.path_hint = QLabel(
-            f"默认文件名为 <code>{self._name_prefix}&lt;原命令名&gt;</code>，"
-            f"默认保存到 {self._output_dir}/（首次使用会自动创建）。"
-        )
+        self.path_hint = QLabel(self.tr(
+            "Default file name is <code>{prefix}&lt;orig-command-name&gt;</code>, "
+            "default save location: {dir}/ (created automatically on first use)."
+        ).format(prefix=self._name_prefix, dir=self._output_dir))
         self.path_hint.setWordWrap(True)
         self.path_hint.setStyleSheet("color: #666; font-size: 11px;")
 
         self.label_edit = QLineEdit()
-        self.label_edit.setPlaceholderText("留空则按输出文件名自动生成")
+        self.label_edit.setPlaceholderText(self.tr("Auto-generated from output file name if empty"))
 
         self.signing_combo = QComboBox()
         self.signing_combo.setEditable(True)
-        self.signing_combo.addItem("- (ad-hoc, dev only)")
+        self.signing_combo.addItem(self.tr("- (ad-hoc, dev only)"))
         self.signing_combo.addItem("Developer ID Application: YOUR NAME (TEAMID)")
         self.signing_combo.setCurrentIndex(0)
 
-        self.no_sign_box = QCheckBox("跳过 codesign（仅调试用，会失去 Plan D 保护）")
+        self.no_sign_box = QCheckBox(self.tr("Skip codesign (debug only; loses Plan D protection)"))
 
         self.user_edit = QLineEdit(os.environ.get("USER", ""))
 
         form = QFormLayout(self)
         form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-        form.addRow("输出二进制：", out_row)
+        form.addRow(self.tr("Output binary:"), out_row)
         form.addRow("", self.path_hint)
-        form.addRow("Label（可选）：", self.label_edit)
-        form.addRow("Keychain 账号：", self.user_edit)
-        form.addRow("签名身份：", self.signing_combo)
+        form.addRow(self.tr("Label (optional):"), self.label_edit)
+        form.addRow(self.tr("Keychain account:"), self.user_edit)
+        form.addRow(self.tr("Signing identity:"), self.signing_combo)
         form.addRow("", self.no_sign_box)
 
         # 让 isComplete 随输出/用户变化
@@ -533,7 +541,7 @@ class OptionsPage(QWizardPage):
 
     def _browse(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "选择输出路径",
+            self, self.tr("Choose output path"),
             self.output_edit.text() or str(self._output_dir))
         if path:
             self.output_edit.setText(path)
@@ -561,8 +569,8 @@ class ExecutePage(QWizardPage):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setTitle("执行密封")
-        self.setSubTitle("点击『运行』后，cmdseal.py 将在子进程中构建二进制。")
+        self.setTitle(self.tr("Execute Seal"))
+        self.setSubTitle(self.tr("After clicking “Run”, cmdseal.py will build the binary in a subprocess."))
         self.setCommitPage(True)  # 禁止回退修改已提交的 secret
 
         self._proc: QProcess | None = None
@@ -580,14 +588,14 @@ class ExecutePage(QWizardPage):
         self.log.setFont(mono)
         self.log.setMaximumBlockCount(20000)
 
-        self.run_btn = QPushButton("运行 seal")
+        self.run_btn = QPushButton(self.tr("Run seal"))
         self.run_btn.clicked.connect(self._run)
 
         lay = QVBoxLayout(self)
-        lay.addWidget(QLabel("预览（secret 已脱敏）："))
+        lay.addWidget(QLabel(self.tr("Preview (secrets redacted):")))
         lay.addWidget(self.preview, 0)
         lay.addWidget(self.run_btn)
-        lay.addWidget(QLabel("日志："))
+        lay.addWidget(QLabel(self.tr("Log:")))
         lay.addWidget(self.log, 1)
 
     # --- QWizardPage hooks ---
@@ -602,7 +610,7 @@ class ExecutePage(QWizardPage):
         lines.extend([
             f"output  : {req.output}",
             f"user    : {req.user}",
-            f"label   : {req.label or '(auto)'}",
+            self.tr("label   : {l}").format(l=req.label or self.tr('(auto)')),
             f"sign    : {'--no-sign' if req.no_sign else req.signing_identity}",
         ])
         self.preview.setPlainText("\n".join(lines))
@@ -659,7 +667,7 @@ class ExecutePage(QWizardPage):
             self._proc = proc
             proc.start(argv[0], argv[1:])
             if not proc.waitForStarted(3000):
-                self._append_log("⚠ 子进程启动失败\n")
+                self._append_log(self.tr("⚠ Child process failed to start\n"))
                 self._proc = None
                 self.run_btn.setEnabled(True)
                 return
@@ -670,7 +678,7 @@ class ExecutePage(QWizardPage):
             proc.closeWriteChannel()
         except Exception as e:  # 任何异常都要落到日志，不可静默
             import traceback
-            self._append_log(f"⚠ _run 异常：{e}\n{traceback.format_exc()}\n")
+            self._append_log(self.tr("⚠ _run exception: {e}\n{tb}\n").format(e=e, tb=traceback.format_exc()))
             self._proc = None
             self.run_btn.setEnabled(True)
 
@@ -711,7 +719,7 @@ class ExecutePage(QWizardPage):
 class SealWizard(QWizard):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("cmdseal — 新建 seal")
+        self.setWindowTitle(self.tr("cmdseal — New Seal"))
         self.setWizardStyle(QWizard.ModernStyle)
         self.setOption(QWizard.NoBackButtonOnStartPage, True)
         self.setOption(QWizard.IndependentPages, False)
@@ -735,8 +743,8 @@ class SealWizard(QWizard):
         self.addPage(self.options_page)
         self.addPage(self.execute_page)
 
-        self.setButtonText(QWizard.FinishButton, "完成")
-        self.setButtonText(QWizard.CancelButton, "取消")
-        self.setButtonText(QWizard.NextButton, "下一步 >")
-        self.setButtonText(QWizard.BackButton, "< 上一步")
-        self.setButtonText(QWizard.CommitButton, "确认进入执行")
+        self.setButtonText(QWizard.FinishButton, self.tr("Finish"))
+        self.setButtonText(QWizard.CancelButton, self.tr("Cancel"))
+        self.setButtonText(QWizard.NextButton, self.tr("Next >"))
+        self.setButtonText(QWizard.BackButton, self.tr("< Back"))
+        self.setButtonText(QWizard.CommitButton, self.tr("Confirm and Run"))

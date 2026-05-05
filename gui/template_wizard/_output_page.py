@@ -36,14 +36,14 @@ class OutputConfigPage(QWizardPage):
         #: 文件名前缀；仅用于提示文案。实际拼名在 ParameterSelectionPage.program_name() 完成
         self._name_prefix = name_prefix
 
-        self.setTitle("保存位置")
-        self.setSubTitle("选择封装后的二进制保存到哪里。")
+        self.setTitle(self.tr("Save Location"))
+        self.setSubTitle(self.tr("Choose where to save the sealed binary."))
 
         self.output_edit = QLineEdit()
         self.output_edit.setPlaceholderText(
             str(self._output_dir / f"{self._name_prefix}program")
         )
-        browse = QPushButton("浏览…")
+        browse = QPushButton(self.tr("Browse…"))
         browse.clicked.connect(self._browse)
         out_row = QWidget()
         out_lay = QHBoxLayout(out_row)
@@ -51,26 +51,26 @@ class OutputConfigPage(QWizardPage):
         out_lay.addWidget(self.output_edit, 1)
         out_lay.addWidget(browse)
 
-        self.path_hint = QLabel(
-            f"默认文件名为 <code>{self._name_prefix}&lt;原命令名&gt;</code>，用以与原命令区分。\n"
-            f"默认保存到 {self._output_dir}/（首次使用会自动创建）。\n"
-            "若要全局调用，可手动指定 /usr/local/bin/ 等 PATH 中的目录，"
-            "或自建软链接。"
-        )
+        self.path_hint = QLabel(self.tr(
+            "Default file name is <code>{prefix}&lt;orig-command-name&gt;</code>, to distinguish from the original command.\n"
+            "Default save location: {dir}/ (created automatically on first use).\n"
+            "For global access, manually choose a directory on PATH like /usr/local/bin/, "
+            "or create a symlink yourself."
+        ).format(prefix=self._name_prefix, dir=self._output_dir))
         self.path_hint.setWordWrap(True)
         self.path_hint.setStyleSheet("color: #666; font-size: 11px;")
 
         self.label_edit = QLineEdit()
-        self.label_edit.setPlaceholderText("留空则按输出文件名自动生成")
+        self.label_edit.setPlaceholderText(self.tr("Auto-generated from output file name if empty"))
 
         self.user_edit = QLineEdit(os.environ.get("USER", ""))
 
         form = QFormLayout(self)
         form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-        form.addRow("输出路径：", out_row)
+        form.addRow(self.tr("Output path:"), out_row)
         form.addRow("", self.path_hint)
-        form.addRow("Label（可选）：", self.label_edit)
-        form.addRow("Keychain 账号：", self.user_edit)
+        form.addRow(self.tr("Label (optional):"), self.label_edit)
+        form.addRow(self.tr("Keychain account:"), self.user_edit)
 
         self.output_edit.textChanged.connect(self.completeChanged)
         self.user_edit.textChanged.connect(self.completeChanged)
@@ -88,7 +88,7 @@ class OutputConfigPage(QWizardPage):
 
     def _browse(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "选择输出路径",
+            self, self.tr("Choose output path"),
             self.output_edit.text() or str(self._output_dir))
         if path:
             self.output_edit.setText(path)

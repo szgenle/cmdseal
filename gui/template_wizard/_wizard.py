@@ -15,7 +15,7 @@ class TemplateWizard(QWizard):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("cmdseal — 从命令生成模板")
+        self.setWindowTitle(self.tr("cmdseal — Generate from Command"))
         self.setWizardStyle(QWizard.ModernStyle)
         self.setOption(QWizard.NoBackButtonOnStartPage, True)
         self.setOption(QWizard.IndependentPages, False)
@@ -43,8 +43,8 @@ class TemplateWizard(QWizard):
         self.addPage(self.output_page)
         self.addPage(self.execute_page)
 
-        self.setButtonText(QWizard.FinishButton, "完成")
-        self.setButtonText(QWizard.CancelButton, "取消")
-        self.setButtonText(QWizard.NextButton, "下一步 >")
-        self.setButtonText(QWizard.BackButton, "< 上一步")
-        self.setButtonText(QWizard.CommitButton, "进入执行")
+        self.setButtonText(QWizard.FinishButton, self.tr("Finish"))
+        self.setButtonText(QWizard.CancelButton, self.tr("Cancel"))
+        self.setButtonText(QWizard.NextButton, self.tr("Next >"))
+        self.setButtonText(QWizard.BackButton, self.tr("< Back"))
+        self.setButtonText(QWizard.CommitButton, self.tr("Run"))

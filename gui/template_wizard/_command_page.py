@@ -85,7 +85,7 @@ class CommandLineEdit(QPlainTextEdit):
         completed, matches = complete_path(token)
         if not matches:
             self._last_completed_token = None
-            self.completionHint.emit(f"⚠ 无匹配：{token}")
+            self.completionHint.emit(self.tr("⚠ No match: {token}").format(token=token))
             return
 
         # 用 completed 替换当前 token（仅限光标所在行的那一段）
@@ -103,10 +103,12 @@ class CommandLineEdit(QPlainTextEdit):
         # 多候选：第二次 Tab 时展示候选列表
         if self._last_completed_token == completed:
             preview = matches[:20]
-            more = f"… 共 {len(matches)} 个" if len(matches) > len(preview) else ""
-            self.completionHint.emit("候选：" + "  ".join(preview) + more)
+            more = self.tr(" … {n} total").format(n=len(matches)) if len(matches) > len(preview) else ""
+            self.completionHint.emit(self.tr("Candidates: ") + "  ".join(preview) + more)
         else:
-            self.completionHint.emit(f"{len(matches)} 个候选，再按 Tab 查看")
+            self.completionHint.emit(
+                self.tr("{n} candidates, press Tab again to list").format(n=len(matches))
+            )
         self._last_completed_token = completed
 
 
@@ -132,13 +134,13 @@ class _PipeSegment(QFrame):
         mono = QFont("Menlo")
         mono.setStyleHint(QFont.Monospace)
 
-        self.title = QLabel("段 1")
+        self.title = QLabel(self.tr("Segment 1"))
         self.title.setStyleSheet(
             "QLabel { color: #555; font-weight: bold; background: transparent; }"
         )
         self.remove_btn = QPushButton("×")
         self.remove_btn.setFixedWidth(28)
-        self.remove_btn.setToolTip("删除此段")
+        self.remove_btn.setToolTip(self.tr("Remove this segment"))
         self.remove_btn.clicked.connect(lambda: self.removeRequested.emit(self))
 
         header = QHBoxLayout()
@@ -150,7 +152,7 @@ class _PipeSegment(QFrame):
         self.edit.setFont(mono)
         self.edit.setFixedHeight(70)
         self.edit.setPlaceholderText(
-            "路径 token（以 /、~、./ 开头）可按 Tab 补全"
+            self.tr("Path tokens (starting with /, ~, ./) can be Tab-completed")
         )
         self.edit.textChanged.connect(self.textChanged)
 
@@ -180,14 +182,17 @@ class _PipeSegment(QFrame):
 
     def set_title(self, idx: int, total: int) -> None:
         if idx == 0:
-            tag = "第一段 — 主命令"
+            tag = self.tr("Segment 1 — main command")
         else:
-            tag = f"第 {idx + 1} 段 — 从上段 stdout 读取"
-        self.title.setText(f"段 {idx + 1}（{tag}）")
+            tag = self.tr("Segment {i} — reads stdout of previous segment").format(i=idx + 1)
+        self.title.setText(self.tr("Segment {i} ({tag})").format(i=idx + 1, tag=tag))
 
     def set_removable(self, removable: bool) -> None:
         self.remove_btn.setEnabled(removable)
-        self.remove_btn.setToolTip("删除此段" if removable else "首段不可删除")
+        self.remove_btn.setToolTip(
+            self.tr("Remove this segment") if removable
+            else self.tr("First segment cannot be removed")
+        )
 
     def update_hint(self) -> None:
         cmd = self.text()
@@ -208,19 +213,19 @@ class CommandInputPage(QWizardPage):
         super().__init__()
         #: 试运行超时（毫秒）。由偏好面板控制；未传则沿用历史硬编码。
         self._timeout_ms = timeout_ms
-        self.setTitle("输入命令")
-        self.setSubTitle(
-            "输入真实可执行的命令；点击「➕ 添加管道段」可扩展为多段管道。\n"
-            "点击「试运行整条管道」确认成功后再下一步。\n"
-            "注意：试运行会真的执行命令，请先用无副作用的参数测试。"
-        )
+        self.setTitle(self.tr("Enter Command"))
+        self.setSubTitle(self.tr(
+            "Enter a real executable command; click “➕ Add pipe segment” to extend into a multi-segment pipeline.\n"
+            "Click “Try-run full pipeline” and proceed only after it succeeds.\n"
+            "Note: try-run actually executes the command; use side-effect-free arguments first."
+        ))
 
         mono = QFont("Menlo")
         mono.setStyleHint(QFont.Monospace)
 
         # 顶部常驻示例：始终可见，便于用户照着写；另附一键填入按钮
         self.example_label = QLabel(
-            f"<b>示例：</b> <code>{EXAMPLE_COMMAND}</code>"
+            self.tr("<b>Example:</b> <code>{cmd}</code>").format(cmd=EXAMPLE_COMMAND)
         )
         self.example_label.setWordWrap(True)
         self.example_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -228,20 +233,20 @@ class CommandInputPage(QWizardPage):
             "QLabel { background: #f0f7ff; border: 1px solid #cfe3ff; "
             "border-radius: 4px; padding: 8px; color: #333; }"
         )
-        self.example_btn = QPushButton("填入示例")
-        self.example_btn.setToolTip("将示例命令填入第一段输入框")
+        self.example_btn = QPushButton(self.tr("Insert Example"))
+        self.example_btn.setToolTip(self.tr("Insert the example command into the first segment"))
         self.example_btn.clicked.connect(self._insert_example)
         example_row = QHBoxLayout()
         example_row.addWidget(self.example_label, 1)
         example_row.addWidget(self.example_btn, 0, Qt.AlignTop)
 
         # “不走 shell”警示条：避免用户写 $VAR/|/>/* 后产生与封装后不一致的预期
-        self.shell_warn = QLabel(
-            "⚠ 每段直接 execv 执行，<b>不经 shell</b>："
-            "环境变量 <code>$VAR</code>、管道 <code>|</code>、"
-            "重定向 <code>&gt;</code>、通配符 <code>*</code> 都不会展开；\n"
-            "管道拼接请用「➕ 添加管道段」而非在单段里写 <code>|</code>。"
-        )
+        self.shell_warn = QLabel(self.tr(
+            "⚠ Each segment is executed via execv, <b>not through a shell</b>: "
+            "env vars <code>$VAR</code>, pipes <code>|</code>, "
+            "redirects <code>&gt;</code>, globs <code>*</code> are NOT expanded;\n"
+            "to chain pipelines use “➕ Add pipe segment” instead of writing <code>|</code> inside a segment."
+        ))
         self.shell_warn.setWordWrap(True)
         self.shell_warn.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.shell_warn.setStyleSheet(
@@ -263,24 +268,24 @@ class CommandInputPage(QWizardPage):
         # 段编辑区是主要交互面，给一个足够的最小高度
         self._scroll.setMinimumHeight(260)
 
-        self.add_seg_btn = QPushButton("➕ 添加管道段")
+        self.add_seg_btn = QPushButton(self.tr("➕ Add pipe segment"))
         self.add_seg_btn.clicked.connect(self._add_segment)
 
         self.summary = QLabel("—")
         self.summary.setWordWrap(True)
         self.summary.setStyleSheet("QLabel { color: #555; background: transparent; }")
 
-        self.run_btn = QPushButton("试运行整条管道")
+        self.run_btn = QPushButton(self.tr("Try-run full pipeline"))
         self.run_btn.clicked.connect(self._run)
 
-        self.reset_btn = QPushButton("清除运行结果")
+        self.reset_btn = QPushButton(self.tr("Clear run result"))
         self.reset_btn.clicked.connect(self._reset_run_state)
 
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setFont(mono)
         self.log.setMaximumBlockCount(5000)
-        self.log.setPlaceholderText("此处显示试运行的 stdout/stderr 与退出码")
+        self.log.setPlaceholderText(self.tr("Try-run stdout/stderr and exit code will appear here"))
 
         btn_row = QHBoxLayout()
         btn_row.addWidget(self.run_btn)
@@ -290,12 +295,12 @@ class CommandInputPage(QWizardPage):
         lay = QVBoxLayout(self)
         lay.addLayout(example_row)
         lay.addWidget(self.shell_warn)
-        lay.addWidget(QLabel("命令（多段按顺序串联为管道）："))
+        lay.addWidget(QLabel(self.tr("Command (multiple segments form a pipeline in order):")))
         lay.addWidget(self._scroll, 3)
         lay.addWidget(self.add_seg_btn, 0, Qt.AlignLeft)
         lay.addWidget(self.summary)
         lay.addLayout(btn_row)
-        lay.addWidget(QLabel("试运行输出（最后一段 stdout）："))
+        lay.addWidget(QLabel(self.tr("Try-run output (stdout of last segment):")))
         lay.addWidget(self.log, 1)
 
         # 运行态：多进程链
@@ -314,8 +319,8 @@ class CommandInputPage(QWizardPage):
         current = seg0.text()
         if current and current != EXAMPLE_COMMAND:
             reply = QMessageBox.question(
-                self, "覆盖当前命令？",
-                "第一段输入框中已有命令，填入示例会覆盖现有内容。继续？",
+                self, self.tr("Overwrite current command?"),
+                self.tr("The first segment already has content; inserting the example will overwrite it. Continue?"),
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
             )
             if reply != QMessageBox.Yes:
@@ -357,9 +362,11 @@ class CommandInputPage(QWizardPage):
             seg.set_removable(n > 1 and i > 0)
         self.add_seg_btn.setEnabled(n < MAX_PIPE_SEGMENTS)
         if n >= MAX_PIPE_SEGMENTS:
-            self.add_seg_btn.setToolTip(f"已达硬上限 {MAX_PIPE_SEGMENTS} 段")
+            self.add_seg_btn.setToolTip(self.tr("Hard limit of {n} segments reached").format(n=MAX_PIPE_SEGMENTS))
         else:
-            self.add_seg_btn.setToolTip(f"添加新管道段（当前 {n}/{MAX_PIPE_SEGMENTS}）")
+            self.add_seg_btn.setToolTip(
+                self.tr("Add a new pipe segment (currently {n}/{max})").format(n=n, max=MAX_PIPE_SEGMENTS)
+            )
 
     # --- 状态 ---
     def _on_text_changed(self) -> None:
@@ -382,18 +389,27 @@ class CommandInputPage(QWizardPage):
             self.run_btn.setEnabled(False)
         elif empty_count > 0:
             self.summary.setText(
-                f"<span style='color: #c62828;'>⚠ 存在 {empty_count} 个空段，请填写或删除</span>"
+                "<span style='color: #c62828;'>" + self.tr(
+                    "⚠ {n} empty segment(s); please fill or remove"
+                ).format(n=empty_count) + "</span>"
             )
             self.run_btn.setEnabled(False)
         elif all_valid:
-            msg = f"✓ {n}/{MAX_PIPE_SEGMENTS} 段全部合法"
             if n >= 2:
-                msg += "；将以管道串联试运行"
+                msg = self.tr(
+                    "✓ {n}/{max} segments all valid; will be chained as pipeline"
+                ).format(n=n, max=MAX_PIPE_SEGMENTS)
+            else:
+                msg = self.tr(
+                    "✓ {n}/{max} segments all valid"
+                ).format(n=n, max=MAX_PIPE_SEGMENTS)
             self.summary.setText(f"<span style='color: #2e7d32;'>{msg}</span>")
             self.run_btn.setEnabled(not self._procs)
         else:
             self.summary.setText(
-                "<span style='color: #c62828;'>⚠ 存在非法段，请查看每段红色提示</span>"
+                "<span style='color: #c62828;'>" + self.tr(
+                    "⚠ Invalid segment(s) exist; see red hints per segment"
+                ) + "</span>"
             )
             self.run_btn.setEnabled(False)
 
@@ -420,10 +436,12 @@ class CommandInputPage(QWizardPage):
         preview = " | ".join(current)
         reply = QMessageBox.question(
             self,
-            "确认试运行",
-            "即将真实执行该整条管道。\n"
-            "请确认命令当前参数不会产生破坏性副作用（删文件、覆盖数据等）。\n\n"
-            f"$ {preview}\n\n继续？",
+            self.tr("Confirm Try-Run"),
+            self.tr(
+                "About to actually execute this entire pipeline.\n"
+                "Please verify current arguments cause no destructive side effects (deleting files, overwriting data, etc.).\n\n"
+                "$ {preview}\n\nContinue?"
+            ).format(preview=preview),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if reply != QMessageBox.Yes:
@@ -459,7 +477,7 @@ class CommandInputPage(QWizardPage):
             procs[i].start(toks[0], toks[1:])
         for p in procs:
             if not p.waitForStarted(3000):
-                self.log.appendPlainText("⚠ 子进程启动失败")
+                self.log.appendPlainText(self.tr("⚠ Child process failed to start"))
                 for q in procs:
                     q.kill()
                 self._procs = []
@@ -484,12 +502,12 @@ class CommandInputPage(QWizardPage):
             self.log.appendPlainText(data.rstrip("\n"))
 
     def _on_error(self, err: QProcess.ProcessError) -> None:
-        self.log.appendPlainText(f"⚠ QProcess 错误：{err}")
+        self.log.appendPlainText(self.tr("⚠ QProcess error: {err}").format(err=err))
 
     def _on_timeout(self) -> None:
         if self._procs:
             self.log.appendPlainText(
-                f"⚠ 超时（{self._timeout_ms // 1000}s），已终止整条管道"
+                self.tr("⚠ Timeout ({s}s); pipeline terminated").format(s=self._timeout_ms // 1000)
             )
             for p in self._procs:
                 p.kill()
@@ -511,9 +529,9 @@ class CommandInputPage(QWizardPage):
         self._run_ok = all_ok
         if all_ok:
             self._last_validated_cmds = [seg.text() for seg in self._segments]
-            self.log.appendPlainText("✓ 整条管道验证通过，可进入下一步")
+            self.log.appendPlainText(self.tr("✓ Pipeline verified; you can proceed"))
         else:
-            self.log.appendPlainText("✗ 管道中至少一段失败，请修正后重试")
+            self.log.appendPlainText(self.tr("✗ At least one segment failed; please fix and retry"))
         self._procs = []
         self.run_btn.setEnabled(True)
         self.completeChanged.emit()

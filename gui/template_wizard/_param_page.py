@@ -46,11 +46,11 @@ class ParameterSelectionPage(QWizardPage):
         super().__init__()
         #: 文件名前缀；供 program_name() 拼默认输出名。由偏好面板控制。
         self._name_prefix = name_prefix
-        self.setTitle("选择运行时参数")
-        self.setSubTitle(
-            "点击命令中的 token 切换「字面量 / 运行时参数」。\n"
-            "多段时 argN 编号跨段全局递增：第一个选中的 token 是 arg1，第二个是 arg2……"
-        )
+        self.setTitle(self.tr("Select Runtime Arguments"))
+        self.setSubTitle(self.tr(
+            "Click tokens in the command to toggle “literal / runtime argument”.\n"
+            "With multiple segments, argN numbers increase globally across segments: first selected token is arg1, second is arg2…"
+        ))
 
         # 垂直容器：每段一行 chip
         self._scroll = QScrollArea()
@@ -80,9 +80,9 @@ class ParameterSelectionPage(QWizardPage):
         self.hint.setStyleSheet("QLabel { color: #888; background: transparent; }")
 
         lay = QVBoxLayout(self)
-        lay.addWidget(QLabel("命令分解（蓝色 = 运行时参数，白色 = 字面量）："))
+        lay.addWidget(QLabel(self.tr("Command breakdown (blue = runtime argument, white = literal):")))
         lay.addWidget(self._scroll, 1)
-        lay.addWidget(QLabel("模板预览（每段一行）："))
+        lay.addWidget(QLabel(self.tr("Template preview (one line per segment):")))
         lay.addWidget(self.preview)
         lay.addWidget(self.hint)
 
@@ -122,10 +122,10 @@ class ParameterSelectionPage(QWizardPage):
             row_lay.setSpacing(2)
 
             if total == 1:
-                title_text = "段 1："
+                title_text = self.tr("Segment 1:")
             else:
-                tag = "第一段 / 主命令" if seg_idx == 0 else f"第 {seg_idx + 1} 段 / 读上段 stdout"
-                title_text = f"段 {seg_idx + 1}（{tag}）："
+                tag = self.tr("main command") if seg_idx == 0 else self.tr("reads stdout of previous segment")
+                title_text = self.tr("Segment {i} ({tag}):").format(i=seg_idx + 1, tag=tag)
             title = QLabel(title_text)
             title.setStyleSheet(
                 "QLabel { color: #555; font-weight: bold; background: transparent; }"
@@ -137,7 +137,7 @@ class ParameterSelectionPage(QWizardPage):
                 chip = QPushButton(tok)
                 chip.setCheckable(True)
                 chip.setStyleSheet(self._STYLE_LITERAL)
-                chip.setToolTip(f"段 {seg_idx + 1} token #{tok_idx}：点击切换为运行时参数")
+                chip.setToolTip(self.tr("Segment {s} token #{i}: click to toggle into runtime argument").format(s=seg_idx + 1, i=tok_idx))
 
                 def _on_toggle(
                     checked: bool,
@@ -177,20 +177,24 @@ class ParameterSelectionPage(QWizardPage):
         templates = build_template_many(self._token_groups, self._selected)
         lines = []
         for i, tmpl in enumerate(templates):
-            prefix = f"段 {i + 1}: " if len(templates) > 1 else ""
+            prefix = self.tr("Seg {i}: ").format(i=i + 1) if len(templates) > 1 else ""
             lines.append(f"{prefix}{tmpl}")
         self.preview.setPlainText("\n".join(lines) if lines else "—")
 
         total_selected = sum(len(s) for s in self._selected)
         if total_selected == 0:
             self.hint.setText(
-                "<span style='color: #c62828;'>⚠ 至少在任意一段选择一个 token 作为运行时参数</span>"
+                "<span style='color: #c62828;'>" + self.tr(
+                    "⚠ Select at least one token in any segment as runtime argument"
+                ) + "</span>"
             )
             return
-        msg = f"已选 {total_selected} 个运行时参数 → 运行时按 arg1/arg2/… 顺序传入"
+        msg = self.tr("Selected {n} runtime argument(s) → passed at runtime as arg1/arg2/…").format(n=total_selected)
         # 首 token（段 1 的 index 0）被参数化：提示必须传可执行绝对路径
         if self._selected and 0 in self._selected[0]:
-            msg += "；⚠ 首 token（程序路径）被参数化，运行时必须传入可执行的绝对路径"
+            msg += self.tr(
+                "; ⚠ First token (program path) is parameterized; at runtime you must pass an executable absolute path"
+            )
         self.hint.setText(msg)
 
     def isComplete(self) -> bool:
