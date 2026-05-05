@@ -61,6 +61,16 @@ The GUI is a thin wrapper over `cmdseal.py`; no crypto code is
 duplicated. After sealing, you get a standalone binary that can be
 handed to an AI agent or scripted pipeline.
 
+The main window also offers two other entry points:
+
+- **Generate from Command...** — if you already have a working command,
+  the wizard auto-detects argument positions and generates a sealable
+template with `{{arg:N}}` placeholders, saving you from manual rewriting.
+- **Manage Runners...** — zero-popup listing of all sealed runners on
+  this machine (metadata read from the keychain). Supports right-click
+  to edit the template (when it contains no secret placeholders) or
+cascading delete (cleans up both the keychain entry and the disk file).
+
 ### First-run dialog
 
 The first time you run a freshly-sealed binary, macOS shows **one**
@@ -161,13 +171,23 @@ python3 cmdseal.py rotate ./seal_zip
 
 ```bash
 make sync            # install PySide6 into a local uv venv
-make run             # launches the seal wizard (development mode)
+make run             # launches the main window (development mode)
 make app             # produces dist/cmdseal.app (standalone)
 open dist/cmdseal.app
 ```
 
 The GUI is a thin wrapper over `cmdseal.py`; no crypto code is
 duplicated. See [`gui/`](./gui/) for the sources.
+
+| Entry point | When to use |
+|-------------|-------------|
+| **Generate from Command...** | You have a working command and want a template with placeholders auto-generated. |
+| **Advanced Seal...** | You already have a template with `{{secret:NAME}}` / `{{arg:N}}` and want to seal it. |
+| **Manage Runners...** | Review, edit, or delete existing sealed binaries and their keychain entries. |
+
+Press `⌘,` (comma) to open **Preferences** and optionally set a default
+output directory so the wizard always defaults to a fixed folder. The
+window size is also persisted across restarts.
 
 ## Security model
 
@@ -219,7 +239,13 @@ security delete-generic-password -s cmdseal.<hash>.K
 
 # Inspect the sealed binary's metadata (no secrets visible):
 strings ./seal_zip | grep cmdseal
+
+# List all known runners (JSON output for scripting):
+python3 cmdseal.py list --json
 ```
+
+You can also use the GUI's **Manage Runners...** entry point for a
+visual overview with one-click delete.
 
 ## Distribution policy
 

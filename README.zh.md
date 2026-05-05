@@ -55,6 +55,11 @@ open dist/cmdseal.app
 GUI 是 `cmdseal.py` 的一层薄封装；没有重复的加密代码。
 封存完成后，你会得到一个独立的二进制文件，可以交给 AI 智能体或脚本管道使用。
 
+主窗口还提供另外两个入口：
+
+- **从命令生成模板…** — 如果你已经有一条能直接跑的命令，向导会自动识别参数位置，帮你生成带 `{{arg:N}}` 占位符的可封存模板，省去手动改写。
+- **管理 runner…** — 零弹窗列出本机所有已封存的 runner（从 keychain 读取元数据）。支持右键修改模板（无 secret 占位符时）或联动删除（同时清理 keychain 条目与磁盘文件）。
+
 ### 首次运行对话框
 
 首次运行新生成的二进制时，macOS 会显示**一次**系统对话框
@@ -150,10 +155,20 @@ python3 cmdseal.py rotate ./seal_zip
 
 ```bash
 make sync            # 在本地 uv 虚拟环境中安装 PySide6
-make run             # 启动封存向导（开发模式）
+make run             # 启动主窗口（开发模式）
 make app             # 生成 dist/cmdseal.app（独立应用）
 open dist/cmdseal.app
 ```
+
+启动后主窗口提供三个入口：
+
+| 入口 | 作用 |
+|------|------|
+| **从命令生成模板…** | 把已有命令转成带 `{{arg:N}}` / `{{secret:NAME}}` 占位符的可封存模板 |
+| **高级模式…** | 直接启动四步封存向导（与上文 §快速上手 相同） |
+| **管理 runner…** | 列出、编辑或删除已封存的 runner；右键支持修改模板与联动删除 |
+
+偏好设置（`⌘,`）可配置默认输出目录、文件名前缀和 dry-run 超时；模板向导会读取这些默认值。
 
 GUI 是 `cmdseal.py` 的一层薄封装；没有重复的加密代码。
 参见 [`gui/`](./gui/) 获取源码。
@@ -205,7 +220,12 @@ security delete-generic-password -s cmdseal.<hash>.K
 
 # 检查被封存二进制的元数据（无秘密可见）：
 strings ./seal_zip | grep cmdseal
+
+# 列出本机所有已封存的 runner（零弹窗，仅元数据）：
+python3 cmdseal.py list --json
 ```
+
+或者在 GUI 中打开「管理 runner…」进行可视化查看、修改模板或联动删除。
 
 ## 分发策略
 
