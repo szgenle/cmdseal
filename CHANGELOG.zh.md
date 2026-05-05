@@ -13,15 +13,20 @@
 ## [1.2.1] - 未发布
 
 v1.2 的 GUI 配套版本。将 CLI 端已具备的多段管道能力带到
- PySide6 seal 向导，允许用户可视化地编排管道。
+**两个** PySide6 向导，允许用户可视化地编排管道。
 
 ### 新增
 
-- **向导端多段编辑器**。*命令模板* 页现已改为最多 8 段的
-  编辑框堆叠，配备 `[➕ 添加管道段]` 按钮与每段的
-  `[×]` 删除按钮。每段独立展示 tokens / secrets / args 解析
-  结果，页底的全局摘要合并段数、跨段 `{{arg:N}}` 集和去重
-  后的 secret 名。
+- **seal 向导多段编辑器（高级模式）**。*命令模板* 页现已改为
+  最多 8 段的编辑框堆叠，配备 `[➕ 添加管道段]` 按钮与
+  每段的 `[×]` 删除按钮。每段独立展示 tokens / secrets / args
+  解析结果，页底的全局摘要合并段数、跨段 `{{arg:N}}` 集
+  和去重后的 secret 名。
+- **模板向导多段 chip 编辑器（简化模式）**。*输入命令* 页接受
+  最多 8 段管道；*选择运行时参数* 页按段渲染一行 chip，
+  `{{arg:N}}` 编号在所有段中全局递增。「试运行整条管道」
+  按钮以 `QProcess.setStandardOutputProcess` 串联所有段，
+  与 runner 在封装后实际执行的管道语义等价。
 - **跨段 secret 合并**。`SecretsPage` 会扫描所有段并去重
   secret 名，与 CLI 的全局编号语义完全一致。
 - **按段预览 argv**。`ExecutePage` 将每一段以 `seg N :` 的
@@ -30,18 +35,31 @@ v1.2 的 GUI 配套版本。将 CLI 端已具备的多段管道能力带到
   `cmdseal.py` 命令行时，会以每段一个 `--command` 的方式追加，
   与 CLI 的 `action="append"` 语义对齐。
 
+### 修复
+
+- **模板向导的悬挂引用**。v1.2.1 把 `SealRequest.command` 重命名为
+  `commands: list[str]` 后，`template_wizard.ExecutionPage._build_request`
+  仍然在以 `command=` 关键字传参，导致简化模式向导最后
+  一步抛 `TypeError`。现改为 `commands=param_page.templates()`，
+  走多段路径重新对齐。
+
 ### 安全
 
 - **安全姿态无变化**。GUI 仍仅作为 `cmdseal.py` 的薄包装，
   不复制任何加密 / 分发逻辑。与 CLI 之间的 `--command` 契约
   严格保持，v1.2 runner 侧的所有保障（无 shell、绝对路径、
   `DYLD_*` 剥离、hardened runtime）在多段场景下数值不变。
+- **管道试运行不经 shell**。模板向导的「试运行整条管道」
+  按钮走 `QProcess` 串联图；在单段里写的 `|` 字符不会被当作
+  管道分隔符（顶部警示条会提醒用户改用 `[➕ 添加管道段]`）。
 
 ### 兼容性
 
-- 单段向导使用产出的 CLI 调用字节级等价 v1.1。
+- 任一模式的单段向导会话产出的 CLI 调用字节级等价 v1.1。
 - `SealRequest.command` 保留为只读兼容属性（返回首段），
   避免破坏现有的日志 / 预览调用链。
+- `build_template(tokens, selected)` 保留为 `build_template_many(
+  [tokens], [selected])` 的薄封装；原有单元测试套件无需改动即全部通过。
 
 ## [1.2.0] - 未发布
 

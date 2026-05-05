@@ -237,12 +237,15 @@ The wizard has 4 pages and is more approachable than the seal wizard in § 2.2: 
 
 **Always-visible example**: `echo hello world`. Click “Fill example” to insert it, then “Dry run” to walk through the full flow.
 
-> ⚠ **No shell involved**: the command is executed directly with `execv`; environment variables `$VAR`, pipes `|`, redirection `>`, and globs `*` are not expanded. Wrap with `sh -c` yourself if you need shell features.
+> ⚠ **No shell involved**: every segment is executed directly with `execv`; environment variables `$VAR`, redirection `>`, and globs `*` are not expanded. Wrap with `sh -c` yourself if you need shell features.
+>
+> ➕ **Multi-segment pipeline (v1.2.2)**: to chain `cmd1 | cmd2 | cmd3`, click “➕ Add pipe segment” rather than typing `|` inside a single segment (the pipeline is not mediated by the shell and matches exactly what the sealed runner will execute at runtime). Hard cap is 8 segments.
 
 **Validation rules**:
-- Static check: `shlex`-parseable, and the first token is either on `PATH` or an absolute executable file.
-- Dynamic check: you **must** click “Dry run” and see exit code = 0 to proceed.
-- Dry run has a 10-second timeout; any edit to the command immediately invalidates the “verified” state.
+- Static check (per segment): `shlex`-parseable, and the first token is either on `PATH` or an absolute executable file.
+- Dynamic check: you **must** click “Dry run entire pipeline” and see exit code = 0 for **every** segment to proceed.
+- Multi-segment dry run chains the processes via `QProcess.setStandardOutputProcess` (`proc[i].stdout → proc[i+1].stdin`), which is byte-equivalent to what the v1.2 runner does at runtime; pipefail semantics — any failed segment fails the whole verification.
+- Dry run has a 10-second timeout; any edit to any segment immediately invalidates the “verified” state.
 
 **Tab path completion** (bash-style):
 
@@ -266,7 +269,15 @@ Each token of the command is shown as a clickable “chip”:
 - Unselected tokens are protected via `shlex.quote`, so literals with spaces or special characters stay intact.
 - Selecting the first token triggers a warning: an absolute executable path must be supplied at runtime.
 
-Below, the final template is shown live (e.g. `zip -j -P Demo1234 {{arg:1}} {{arg:2}}`).
+**Multi-segment (v1.2.2)**: each segment gets its own chip row, but `{{arg:N}}` numbering increments **globally** across all segments. For example, if segment 1 selects 2 tokens, the first selected token in segment 2 becomes `{{arg:3}}`; at runtime arguments are dispatched across segments in the same `seal_xxx arg1 arg2 arg3 …` order. This strategy aligns with the seal wizard’s `_scan_placeholders_many` in advanced mode.
+
+Below, the final template is rendered per segment:
+
+```text
+seg 1: /bin/echo {{arg:1}}
+seg 2: /usr/bin/tr a-z A-Z
+seg 3: /usr/bin/zip {{arg:2}} -
+```
 
 ---
 

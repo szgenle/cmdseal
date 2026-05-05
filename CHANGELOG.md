@@ -13,17 +13,24 @@ own independent version number and is not required to stay in lock-step.
 ## [1.2.1] - Unreleased
 
 GUI companion release for v1.2. Brings the multi-segment pipe
-capability from the CLI to the PySide6 seal wizard so users can
+capability from the CLI to **both** PySide6 wizards so users can
 compose pipelines visually.
 
 ### Added
 
-- **Multi-segment editor in the seal wizard.** The *Command* page
-  now hosts a stack of up to 8 pipe-segment editors with a
-  `[+ Add pipe segment]` button and per-segment `[×]` remove.
+- **Multi-segment editor in the seal wizard (advanced mode).** The
+  *Command* page now hosts a stack of up to 8 pipe-segment editors
+  with a `[+ Add pipe segment]` button and per-segment `[×]` remove.
   Each segment shows its own token count / secret / arg inspection,
   while a footer summarises the cross-segment totals (segments,
   global `{{arg:N}}` set, merged secret names).
+- **Multi-segment chip editor in the template wizard (novice mode).**
+  The *Command input* page accepts up to 8 pipe segments; the
+  *Parameter selection* page renders one chip row per segment with
+  `{{arg:N}}` numbering globally incrementing across segments. The
+  whole pipeline is dry-run end-to-end via a chained `QProcess`
+  graph (`setStandardOutputProcess`), exactly matching the
+  runner's pipeline semantics at runtime.
 - **Cross-segment secret merging.** `SecretsPage` now scans every
   segment and deduplicates secret names, preserving the CLI's
   global semantics.
@@ -33,6 +40,16 @@ compose pipelines visually.
   emits one `--command` per segment when building the `cmdseal.py`
   invocation, matching the CLI's `action="append"` behaviour.
 
+### Fixed
+
+- **Template wizard dangling reference.** After v1.2.1 renamed the
+  `SealRequest.command` field to `commands: list[str]`,
+  `template_wizard.ExecutionPage._build_request` was still passing
+  `command=` as a keyword argument and would `TypeError` at the
+  final step of the novice-mode wizard. Now it calls
+  `commands=param_page.templates()` and round-trips through the
+  multi-segment path.
+
 ### Security
 
 - No change to the security posture. GUI remains a thin wrapper
@@ -40,14 +57,22 @@ compose pipelines visually.
   The `--command` contract with the CLI is preserved verbatim,
   so all v1.2 runner-side guarantees (no shell, absolute path,
   `DYLD_*` stripping, hardened runtime) carry through unchanged.
+- **Pipeline dry-run stays off the shell.** The template wizard's
+  "Run entire pipeline" button uses a chained `QProcess` graph; the
+  `|` character typed in a single segment is **not** treated as a
+  pipe delimiter (a warning banner spells this out, and the user is
+  directed to the `[+ Add pipe segment]` button instead).
 
 ### Compatibility
 
-- A single-segment wizard session produces the exact same CLI
-  invocation as v1.1.
+- A single-segment wizard session (either mode) produces the exact
+  same CLI invocation as v1.1.
 - `SealRequest.command` is kept as a read-only compatibility
   property (returns first segment) to avoid breaking downstream
   log / preview callers.
+- `build_template(tokens, selected)` is retained as a thin wrapper
+  over the new `build_template_many([tokens], [selected])`; the
+  existing unit-test suite passes unchanged.
 
 ## [1.2.0] - Unreleased
 

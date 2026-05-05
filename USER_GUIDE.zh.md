@@ -232,12 +232,15 @@ zhmm-cli --pwd {{secret:master}} --api-key {{secret:apikey}}
 
 **顶部常驻示例**：`echo hello world`。点「填入示例」一键填充，然后「试运行」走通整条流程。
 
-> ⚠ **不走 shell**：命令直接 `execv` 执行，环境变量 `$VAR`、管道 `|`、重定向 `>`、通配符 `*` 都不会展开。需要 shell 特性请自己包 `sh -c`。
+> ⚠ **不走 shell**：每段命令直接 `execv` 执行，环境变量 `$VAR`、重定向 `>`、通配符 `*` 都不会展开。需要 shell 特性请自己包 `sh -c`。
+>
+> ➕ **多段管道（v1.2.2）**：要拼接 `cmd1 | cmd2 | cmd3`，请点「➕ 添加管道段」而非在单段里写 `|`（管道不经 shell，与 runner 在封装后实际执行的路径一致）。硬上限 8 段。
 
 **验证规则**：
-- 静态检查：`shlex` 合法 + 首 token 在 PATH 中或为绝对可执行文件
-- 动态验证：**必须**点「试运行」且 exit code = 0，才能进入下一步
-- 试运行有 10 秒超时；命令一旦被修改，“已验证”状态立即失效
+- 静态检查（每段各自）：`shlex` 合法 + 首 token 在 PATH 中或为绝对可执行文件
+- 动态验证：**必须**点「试运行整条管道」且所有段 exit code = 0，才能进入下一步
+- 多段走 `QProcess.setStandardOutputProcess` 串联（`proc[i].stdout → proc[i+1].stdin`），与 v1.2 runner 在封装后的执行语义等价；pipefail 等价——任一段失败则整条验证失败
+- 试运行有 10 秒超时；任一段被修改，“已验证”状态立即失效
 
 **Tab 路径补全**（bash 风格）：
 
@@ -261,7 +264,15 @@ zhmm-cli --pwd {{secret:master}} --api-key {{secret:apikey}}
 - 未选中的 token 会走 `shlex.quote` 保护，含空格/特殊字符的字面量不会被破坏
 - 选中首 token 会给出警告：运行时需传入绝对可执行路径
 
-下方实时展示最终模板（如 `zip -j -P Demo1234 {{arg:1}} {{arg:2}}`）。
+**多段时（v1.2.2）**：每段单独一行 chip，但 `{{arg:N}}` 编号在**所有段**中全局递增。例如第一段选了 2 个 token，第二段的首个选中 token 就是 `{{arg:3}}`；运行时亦按 `seal_xxx arg1 arg2 arg3 …` 的顺序跨段分发。这策略与 seal 向导（高级模式）下的 `_scan_placeholders_many` 规则对齐。
+
+下方实时展示每段的最终模板：
+
+```text
+段 1: /bin/echo {{arg:1}}
+段 2: /usr/bin/tr a-z A-Z
+段 3: /usr/bin/zip {{arg:2}} -
+```
 
 ---
 
