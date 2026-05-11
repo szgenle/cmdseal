@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.13,<3.14"
 license = { text = "MIT" }
 authors = [
-    { name = "szgenle", email = "dev@szgenle.com" },
+    { name = "lioesquieu" },
 ]
 keywords = ["macos", "security", "keychain", "shell", "cli", "gui", "pyside6"]
 classifiers = [

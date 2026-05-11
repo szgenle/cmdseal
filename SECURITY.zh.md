@@ -20,13 +20,10 @@
 
 **请不要通过公开的 GitHub issue 报告安全问题。**
 
-请通过以下任一私密渠道上报：
-
-- **邮件：** `dev@szgenle.com`，标题请以 `[cmdseal security]`
-  作为前缀。
-- **GitHub Security Advisories：** 在仓库的 *Security* 标签页点击
-  *Report a vulnerability*
-  (<https://github.com/szgenle/cmdseal/security/advisories/new>)。
+请通过 **GitHub Security Advisories** 私密上报：在仓库的
+*Security* 标签页点击 *Report a vulnerability*
+(<https://github.com/szgenle/cmdseal/security/advisories/new>)，
+标题请以 `[cmdseal security]` 作为前缀。
 
 一份有用的报告通常包含：
 

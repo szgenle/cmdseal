@@ -22,13 +22,10 @@ reporting.
 
 **Do not open a public GitHub issue for security problems.**
 
-Please report privately via either channel:
-
-- **Email:** `dev@szgenle.com` — include a clear title prefixed with
-  `[cmdseal security]`.
-- **GitHub Security Advisories:** use the *Report a vulnerability*
-  button on the repository's *Security* tab
-  (<https://github.com/szgenle/cmdseal/security/advisories/new>).
+Please report privately via **GitHub Security Advisories**: click the
+*Report a vulnerability* button on the repository's *Security* tab
+(<https://github.com/szgenle/cmdseal/security/advisories/new>). Use a
+clear title prefixed with `[cmdseal security]`.
 
 A useful report typically includes:
 

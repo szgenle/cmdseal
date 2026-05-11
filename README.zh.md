@@ -279,4 +279,4 @@ Qt 是 The Qt Company Ltd. 的商标；`cmdseal` 与 The Qt Company
 
 - [DESIGN.md](./DESIGN.md) — 架构和设计决策
 - [DESIGN.zh.md](./DESIGN.zh.md) — 中文设计说明
-- 作者：[szgenle.com](https://szgenle.com)
+- 作者：[lioesquieu](https://lioesquieu.github.io/)

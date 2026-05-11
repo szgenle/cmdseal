@@ -302,4 +302,4 @@ full list of third-party components and our LGPL compliance notes.
 
 - [DESIGN.md](./DESIGN.md) — architecture and design decisions
 - [DESIGN.zh.md](./DESIGN.zh.md) — 中文设计说明
-- Author: [szgenle.com](https://szgenle.com)
+- Author: [lioesquieu](https://lioesquieu.github.io/)

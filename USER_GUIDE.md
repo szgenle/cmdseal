@@ -871,4 +871,4 @@ cmdseal/
 
 **Document version**: v1.1  
 **Last updated**: 2026-05-05  
-**Maintainer**: szgenle
+**Maintainer**: [lioesquieu](https://lioesquieu.github.io/)
