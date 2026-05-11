@@ -25,7 +25,7 @@ QT_HEADLESS := QT_QPA_PLATFORM=offscreen
 .PHONY: help
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "目标：\n"} \
-		/^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' \
+		/^[a-zA-Z0-9_-]+:.*?##/ { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' \
 		$(MAKEFILE_LIST)
 
 # ---------------------------------------------------------------------------
@@ -86,15 +86,19 @@ I18N_SRC := gui/main_window.py gui/runner_list.py gui/preferences.py \
 
 # pyside6-lupdate / pyside6-lrelease 在 uv venv 里没有暴露为 console
 # script；它们以裸可执行文件存在于 PySide6 包目录下。用 Python 运
-# 行时定位，避免依赖 PATH。
-PYSIDE6_DIR = $(shell $(UV) run python3 -c "import PySide6, pathlib; print(pathlib.Path(PySide6.__file__).parent)")
+# 行时在 recipe 里定位——不要用顶层 $(shell ...)，否则每次 make
+# 加载（连 `make help` / `make smoke`）都会启动一次 uv + import
+# PySide6，白白增加 0.3-0.5s 开销。
+PYSIDE6_DIR_CMD = $(UV) run python3 -c "import PySide6, pathlib; print(pathlib.Path(PySide6.__file__).parent)"
 
 i18n-update: ## 从源码扫出最新 UI 字符串到 .ts
 	@mkdir -p gui/translations
-	"$(PYSIDE6_DIR)/lupdate" $(I18N_SRC) -ts $(I18N_TS)
+	@PYSIDE6_DIR=$$($(PYSIDE6_DIR_CMD)) && \
+		"$$PYSIDE6_DIR/lupdate" $(I18N_SRC) -ts $(I18N_TS)
 
 i18n-release: ## 编译 .ts -> .qm（GUI 运行时加载）
-	"$(PYSIDE6_DIR)/lrelease" $(I18N_TS) -qm $(I18N_QM)
+	@PYSIDE6_DIR=$$($(PYSIDE6_DIR_CMD)) && \
+		"$$PYSIDE6_DIR/lrelease" $(I18N_TS) -qm $(I18N_QM)
 
 # ---------------------------------------------------------------------------
 # C helper（供 cmdseal.py 调用；日常无需手动）

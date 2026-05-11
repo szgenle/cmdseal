@@ -527,6 +527,12 @@ from CI (`set -e`-friendly).
   re-queries the CLI in `--dry-run --json` mode and aborts if the
   keychain state changed since the table was populated — a
   lightweight guard against concurrent edits.
+- If the underlying `cmdseal gc --yes` exits non-zero but still
+  produces a valid JSON report (some orphans deleted, others
+  failed), the GUI shows a *Garbage collect partially failed*
+  warning instead of a misleading success dialog. The prescribed
+  recovery is to click **Refresh** and inspect what remains in the
+  table.
 
 The GUI never talks to the keychain directly; it shells out to
 `cmdseal.py gc --json` so CLI and GUI always agree on what

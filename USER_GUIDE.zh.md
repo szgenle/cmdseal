@@ -516,6 +516,11 @@ Manage…`）把 `cmdseal gc` 看到的数据搬到了界面上：
   时自动禁用。确认对话框提供一个 **Dry run first** 复选框
   （默认勾选）：勾选后会先以 `--dry-run --json` 再查一次
   CLI，若期间 keychain 状态被并发修改则中止，防止误删。
+- 若底层 `cmdseal gc --yes` 非零退出但仍输出合法
+  JSON 报告（有的孤儿删成功、有的失败），GUI 会弹
+  *批量回收部分失败* 的 warning 对话框，而不是误报
+  成功。正规恢复动作：点 **Refresh** 刷新表格，看哪几
+  条仍然残留。
 
 GUI 从不直接访问 keychain，所有操作都通过 subprocess 调
 `cmdseal.py gc --json`——CLI 和 GUI 对 live / orphan / legacy

@@ -565,11 +565,25 @@ class RunnerListWindow(QWidget):
                 return
 
             deleted = len(report.get("orphans") or [])
-            QMessageBox.information(
-                self, "cmdseal",
-                self.tr("Garbage collect complete: {n} item(s) deleted.\n\n"
-                        "Run `cmdseal gc --dry-run` from the terminal for a "
-                        "second opinion.").format(n=deleted))
+            if report.get("_partial"):
+                QMessageBox.warning(
+                    self, "cmdseal",
+                    self.tr(
+                        "Garbage collect partially failed "
+                        "(rc={rc}).\n\n"
+                        "{n} item(s) were scheduled for deletion; "
+                        "at least one helper call failed. Click "
+                        "Refresh to see what remains.\n\n{err}").format(
+                        rc=report.get("_rc", 1),
+                        n=deleted,
+                        err=report.get("_stderr", "")))
+            else:
+                QMessageBox.information(
+                    self, "cmdseal",
+                    self.tr("Garbage collect complete: {n} item(s) "
+                            "deleted.\n\nRun `cmdseal gc --dry-run` "
+                            "from the terminal for a second opinion."
+                            ).format(n=deleted))
         finally:
             # refresh() 会自己 re-enable 这些按钮
             self.refresh()

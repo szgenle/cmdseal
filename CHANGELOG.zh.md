@@ -39,6 +39,25 @@
   所有判定都交给 `cmdseal.py`。测试覆盖：
   `tests/test_gui_gc.py`（8 个用例）。
 
+### 变更
+
+- **`backend.gc_runners` 容忍部分失败**。当
+  `cmdseal gc --yes --json` rc=1 但仍输出合法 JSON
+  报告时（有的孤儿删成功、有的失败），wrapper
+  不再直接抛异常，而是返回解析后的 dict 并打上
+  `_partial=True` / `_rc` / `_stderr` 标记。GUI 会弹
+  *批量回收部分失败* 的 warning 对话框，引导用户
+  点 **Refresh** 检查残留条目，而不是误报成功。
+  硬错（rc!=0 且 stdout 不是合法 JSON）仍依旧抛
+  `CalledProcessError`。测试覆盖：`tests/test_gui_gc.py`
+  → 11 条（+3）。
+- **Makefile**：`i18n-update` / `i18n-release` 改在 recipe
+  内部定位 PySide6 的 `lupdate` / `lrelease` 可执行文件，
+  不再放在顶层 `$(shell ...)`。这样 `make help` /
+  `make smoke` 不再每次负担 0.3-0.5s 的 uv + import
+  PySide6 启动开销。顺手修复了 help 的 awk regex，让
+  `i18n-*` 目标能出现在列表里。
+
 ### 文档
 
 - **USER_GUIDE §4.4**。新增章节记录 `cmdseal gc` 的判定规则、

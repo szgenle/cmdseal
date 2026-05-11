@@ -3,11 +3,14 @@
 
 验证点：
 1. backend.gc_runners() 正确拼接 argv（--json / --dry-run / --yes）并解析返回
-2. runner_list._classify_status 的 live/orphan/legacy 分类与 CLI 端一致
-3. RunnerListWindow.refresh() 扫出孤儿后 _btn_gc 可点击；无孤儿时 disabled
-4. RunnerListWindow._run_gc() 未勾选 dry-run 时直走 gc_runners(apply=True)
-5. RunnerListWindow._run_gc() 勾选 dry-run 时先调 apply=False 做一致性
+2. backend.gc_runners() rc=1 但 stdout 是合法 JSON → 返回 dict + _partial=True
+3. backend.gc_runners() rc!=0 且 stdout 不是 JSON → 抛 CalledProcessError
+4. runner_list._classify_status 的 live/orphan/legacy 分类与 CLI 端一致
+5. RunnerListWindow.refresh() 扫出孤儿后 _btn_gc 可点击；无孤儿时 disabled
+6. RunnerListWindow._run_gc() 未勾选 dry-run 时直走 gc_runners(apply=True)
+7. RunnerListWindow._run_gc() 勾选 dry-run 时先调 apply=False 做一致性
    校验，一致则追调 apply=True；不一致则中止，且不触发真实删除
+8. RunnerListWindow._run_gc() apply 返回 _partial=True → 弹 warning 而非 information
 
 测试不需要 macOS keychain，不需要 subprocess；所有外部调用用 monkeypatch 打掉。
 """
@@ -105,6 +108,53 @@ def test_backend_gc_runners_apply() -> None:
     print("  ✅ backend.gc_runners(apply=True) 拼 --yes --json")
 
 
+def test_backend_gc_runners_partial_failure() -> None:
+    """rc=1 但 stdout 是合法 JSON → 返回 dict 带 _partial=True。"""
+    def fake_run(argv: list[str], **kwargs: Any) -> _FakeCompleted:
+        res = _FakeCompleted(
+            stdout='{"orphans": [{"service": "cmdseal.a.K", '
+                   '"account": "ws"}], "live": [], "legacy": [], '
+                   '"would_delete": false}',
+            stderr="helper delete failed for cmdseal.a.K\n",
+            returncode=1,
+        )
+        res.args = argv
+        return res
+
+    with patch.object(backend.subprocess, "run", side_effect=fake_run):
+        report = backend.gc_runners(apply=True)
+
+    assert report.get("_partial") is True, report
+    assert report.get("_rc") == 1, report
+    assert "helper delete failed" in report.get("_stderr", ""), report
+    assert report["orphans"][0]["service"] == "cmdseal.a.K"
+    print("  ✅ backend.gc_runners rc=1+JSON → _partial=True")
+
+
+def test_backend_gc_runners_rc1_no_json_raises() -> None:
+    """rc!=0 且 stdout 不是合法 JSON → 抛 CalledProcessError。"""
+    import subprocess as _sp
+
+    def fake_run(argv: list[str], **kwargs: Any) -> _FakeCompleted:
+        res = _FakeCompleted(
+            stdout="Traceback: KeychainNotUnlocked\n",
+            stderr="fatal\n",
+            returncode=2,
+        )
+        res.args = argv
+        return res
+
+    with patch.object(backend.subprocess, "run", side_effect=fake_run):
+        raised = False
+        try:
+            backend.gc_runners(apply=True)
+        except _sp.CalledProcessError as e:
+            raised = True
+            assert e.returncode == 2
+        assert raised, "expected CalledProcessError for rc!=0 + bad stdout"
+    print("  ✅ backend.gc_runners rc=2+非 JSON → 抛 CalledProcessError")
+
+
 # ---- RunnerListWindow.refresh() gc 按钮开关 -----------------------------
 
 def _ensure_app() -> QApplication:
@@ -136,11 +186,9 @@ def test_refresh_enables_gc_when_orphans_present(tmp_path: Path) -> None:
     items, _ = _mk_items(tmp_path)
     with patch.object(runner_list, "list_sealed", return_value=items):
         w = runner_list.RunnerListWindow()
-    # 首开即 refresh()；按钮应 enabled，表格应 4 行
     assert w._table.rowCount() == 4
     assert w._btn_gc.isEnabled()
     assert len(w._orphans_cache) == 2
-    # 状态栏文案含 "2 orphan"
     assert "2" in w._status.text()
     w.close()
     print("  ✅ refresh 有孤儿 → _btn_gc enabled，_orphans_cache=2")
@@ -153,7 +201,7 @@ def test_refresh_disables_gc_when_no_orphans(tmp_path: Path) -> None:
     items = [
         {"service": "cmdseal.a.K", "account": "ws",
          "_meta": {"output_path": str(live_bin), "label": "only"}},
-        {"service": "cmdseal.b.K", "account": "ws", "_meta": None},  # legacy
+        {"service": "cmdseal.b.K", "account": "ws", "_meta": None},
     ]
     with patch.object(runner_list, "list_sealed", return_value=items):
         w = runner_list.RunnerListWindow()
@@ -163,7 +211,7 @@ def test_refresh_disables_gc_when_no_orphans(tmp_path: Path) -> None:
     print("  ✅ refresh 无孤儿 → _btn_gc disabled")
 
 
-# ---- _run_gc 两条路径 ----------------------------------------------------
+# ---- _run_gc 各条路径 ----------------------------------------------------
 
 def test_run_gc_no_dry_run_directly_deletes(tmp_path: Path) -> None:
     _ensure_app()
@@ -185,7 +233,6 @@ def test_run_gc_no_dry_run_directly_deletes(tmp_path: Path) -> None:
          patch.object(runner_list, "list_sealed", return_value=items):
         w._run_gc(list(w._orphans_cache), dry_run_first=False)
 
-    # 未勾 dry-run：只一次 apply=True
     assert calls == [True], calls
     w.close()
     print("  ✅ _run_gc 未勾 dry-run：仅调一次 apply=True")
@@ -212,7 +259,6 @@ def test_run_gc_dry_run_consistent_then_deletes(tmp_path: Path) -> None:
          patch.object(runner_list, "list_sealed", return_value=items):
         w._run_gc(list(w._orphans_cache), dry_run_first=True)
 
-    # 勾 dry-run 且一致：apply=False → apply=True
     assert calls == [False, True], calls
     w.close()
     print("  ✅ _run_gc 勾 dry-run 且一致：apply=False → apply=True")
@@ -247,25 +293,72 @@ def test_run_gc_dry_run_mismatch_aborts(tmp_path: Path) -> None:
          patch.object(runner_list, "list_sealed", return_value=items):
         w._run_gc(list(w._orphans_cache), dry_run_first=True)
 
-    # 勾 dry-run 且不一致：只调一次 apply=False，不走 apply=True
     assert calls == [False], calls
-    # 应弹 warning 提示用户刷新
     assert warnings, "expected a QMessageBox.warning"
     w.close()
     print("  ✅ _run_gc 勾 dry-run 且不一致：apply=False 后中止，弹 warning")
+
+
+def test_run_gc_apply_partial_failure(tmp_path: Path) -> None:
+    """apply 返回 _partial=True → 弹 warning 而非 information。"""
+    _ensure_app()
+    items, _ = _mk_items(tmp_path)
+    with patch.object(runner_list, "list_sealed", return_value=items):
+        w = runner_list.RunnerListWindow()
+
+    def fake_gc(*, apply: bool, prefix: str = "cmdseal.") -> dict:
+        return {
+            "orphans": [
+                {"service": "cmdseal.o1.K", "account": "ws"},
+                {"service": "cmdseal.o2.K", "account": "ws"},
+            ],
+            "live": [], "legacy": [], "would_delete": False,
+            "_partial": True, "_rc": 1,
+            "_stderr": "helper delete failed for cmdseal.o2.K\n",
+        }
+
+    warnings: list[str] = []
+    infos: list[str] = []
+
+    def fake_warning(parent: Any, title: str, text: str,
+                     *args: Any, **kwargs: Any) -> int:
+        warnings.append(text)
+        return 0
+
+    def fake_info(parent: Any, title: str, text: str,
+                  *args: Any, **kwargs: Any) -> int:
+        infos.append(text)
+        return 0
+
+    with patch.object(runner_list, "gc_runners", side_effect=fake_gc), \
+         patch.object(runner_list.QMessageBox, "warning",
+                      side_effect=fake_warning), \
+         patch.object(runner_list.QMessageBox, "information",
+                      side_effect=fake_info), \
+         patch.object(runner_list, "list_sealed", return_value=items):
+        w._run_gc(list(w._orphans_cache), dry_run_first=False)
+
+    assert warnings, f"expected warning for _partial, got infos={infos}"
+    assert not infos, f"should not show success info on partial: {infos}"
+    assert "cmdseal.o2.K" in warnings[0], warnings[0]
+    w.close()
+    print("  ✅ _run_gc apply 部分失败：弹 warning 而非 information")
 
 
 # ---- runner ---------------------------------------------------------------
 
 _TESTS = [
     ("_classify_status live/orphan/legacy", test_classify_live_orphan_legacy),
-    ("backend.gc_runners dry-run argv",    test_backend_gc_runners_dry_run),
-    ("backend.gc_runners apply argv",      test_backend_gc_runners_apply),
-    ("refresh 有孤儿启用 gc",              test_refresh_enables_gc_when_orphans_present),
-    ("refresh 无孤儿禁用 gc",              test_refresh_disables_gc_when_no_orphans),
-    ("_run_gc 未勾 dry-run",               test_run_gc_no_dry_run_directly_deletes),
-    ("_run_gc 勾 dry-run 一致",            test_run_gc_dry_run_consistent_then_deletes),
-    ("_run_gc 勾 dry-run 不一致中止",      test_run_gc_dry_run_mismatch_aborts),
+    ("backend.gc_runners dry-run argv",     test_backend_gc_runners_dry_run),
+    ("backend.gc_runners apply argv",       test_backend_gc_runners_apply),
+    ("backend.gc_runners partial failure",  test_backend_gc_runners_partial_failure),
+    ("backend.gc_runners rc!=0 non-JSON",   test_backend_gc_runners_rc1_no_json_raises),
+    ("refresh 有孤儿启用 gc",               test_refresh_enables_gc_when_orphans_present),
+    ("refresh 无孤儿禁用 gc",               test_refresh_disables_gc_when_no_orphans),
+    ("_run_gc 未勾 dry-run",                test_run_gc_no_dry_run_directly_deletes),
+    ("_run_gc 勾 dry-run 一致",             test_run_gc_dry_run_consistent_then_deletes),
+    ("_run_gc 勾 dry-run 不一致中止",       test_run_gc_dry_run_mismatch_aborts),
+    ("_run_gc apply 部分失败",              test_run_gc_apply_partial_failure),
 ]
 
 

@@ -1019,7 +1019,20 @@ CLI 当前报告   ：{b}
 {err}</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="572"/>
+        <location filename="../runner_list.py" line="576"/>
+        <source>Garbage collect partially failed (rc={rc}).
+
+{n} item(s) were scheduled for deletion; at least one helper call failed. Click Refresh to see what remains.
+
+{err}</source>
+        <translation>批量回收部分失败（rc={rc}）。
+
+已尝试删除 {n} 条，至少一条 helper 调用失败。请点 Refresh 查看哪些仍残留。
+
+{err}</translation>
+    </message>
+    <message>
+        <location filename="../runner_list.py" line="586"/>
         <source>Garbage collect complete: {n} item(s) deleted.
 
 Run `cmdseal gc --dry-run` from the terminal for a second opinion.</source>

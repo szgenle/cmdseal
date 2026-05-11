@@ -41,6 +41,26 @@ own independent version number and is not required to stay in lock-step.
   never touches the keychain directly; all decisions defer to
   `cmdseal.py`. Test coverage: `tests/test_gui_gc.py` (8 cases).
 
+### Changed
+
+- **`backend.gc_runners` tolerates partial failure.** When
+  `cmdseal gc --yes --json` exits with `rc=1` but still emits
+  a valid JSON report (some orphans deleted, others failed),
+  the wrapper now returns the parsed dict annotated with
+  `_partial=True` / `_rc` / `_stderr` instead of raising. The
+  GUI shows a *Garbage collect partially failed* warning and
+  points the user at **Refresh** to see what remains, rather
+  than displaying a misleading success dialog. Fatal errors
+  (rc!=0 without a parseable JSON payload) still raise
+  `CalledProcessError` as before. Test coverage:
+  `tests/test_gui_gc.py` → 11 cases (+3).
+- **Makefile**: `i18n-update` / `i18n-release` now locate the
+  PySide6 `lupdate` / `lrelease` binaries at recipe-time
+  instead of via a top-level `$(shell ...)`, so `make help`
+  and `make smoke` no longer pay the 0.3-0.5s cost of spinning
+  up uv + importing PySide6 on every invocation. Also fixes
+  the `help` regex so `i18n-*` targets show up.
+
 ### Docs
 
 - **USER_GUIDE §4.4**. New section documenting `cmdseal gc` —

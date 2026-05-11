@@ -187,11 +187,18 @@ def gc_runners(prefix: str = "cmdseal.", *, apply: bool = False) -> dict:
     返回解析后的 JSON dict，形如：
       ``{"orphans": [...], "live": [...], "legacy": [...], "would_delete": bool}``
 
-    失败时抛 ``CalledProcessError``；UI 层自行捕获展示。
-    注：``cmdseal gc --yes --json`` 在有部分删除失败时会返回 rc=1，
-    但仍然会打印合法的 JSON。为了让 UI 层能看到部分结果，
-    这里不将 rc!=0 一律当成空失败；rc 和 stdout 都放在
-    ``CalledProcessError`` 里，调用方可自行决定是否解析。
+    错误处理语义：
+
+    * ``rc == 0``            → 返回解析后的 dict。
+    * ``rc != 0`` 但 stdout
+      能解析成合法 JSON → 依然返回该 dict，并打上
+      ``_partial=True`` / ``_rc`` / ``_stderr`` 辅助字段。这遵循
+      ``cmdseal gc --yes --json`` 的实际行为：删除前先打印
+      JSON「预期清单」，然后逐条试删，任一条失败则 rc=1。
+      这样 UI 能看到「应该被删」的完整列表，配合 refresh
+      可以反推哪几条仍残留。
+    * ``rc != 0`` 且 stdout 不是合法 JSON → 抛
+      ``CalledProcessError``，让调用方走流程性错误分支。
     """
     if not CMDSEAL_PY.is_file():
         raise FileNotFoundError(f"cmdseal.py not found at {CMDSEAL_PY}")
@@ -208,7 +215,18 @@ def gc_runners(prefix: str = "cmdseal.", *, apply: bool = False) -> dict:
         cwd=str(PROJECT_ROOT),
         env=os.environ.copy(),
     )
-    if res.returncode != 0:
+    stdout = res.stdout or ""
+    if res.returncode == 0:
+        return json.loads(stdout or "{}")
+    # rc != 0：尝试从 stdout 解析 JSON，失败则按硬错抛异常。
+    try:
+        report = json.loads(stdout) if stdout.strip() else None
+    except json.JSONDecodeError:
+        report = None
+    if not isinstance(report, dict):
         raise subprocess.CalledProcessError(
             res.returncode, res.args, res.stdout, res.stderr)
-    return json.loads(res.stdout or "{}")
+    report["_partial"] = True
+    report["_rc"] = res.returncode
+    report["_stderr"] = res.stderr or ""
+    return report
