@@ -84,12 +84,17 @@ I18N_SRC := gui/main_window.py gui/runner_list.py gui/preferences.py \
             gui/template_wizard/_output_page.py \
             gui/template_wizard/_exec_page.py
 
+# pyside6-lupdate / pyside6-lrelease 在 uv venv 里没有暴露为 console
+# script；它们以裸可执行文件存在于 PySide6 包目录下。用 Python 运
+# 行时定位，避免依赖 PATH。
+PYSIDE6_DIR = $(shell $(UV) run python3 -c "import PySide6, pathlib; print(pathlib.Path(PySide6.__file__).parent)")
+
 i18n-update: ## 从源码扫出最新 UI 字符串到 .ts
 	@mkdir -p gui/translations
-	$(UV) run pyside6-lupdate $(I18N_SRC) -ts $(I18N_TS)
+	"$(PYSIDE6_DIR)/lupdate" $(I18N_SRC) -ts $(I18N_TS)
 
 i18n-release: ## 编译 .ts -> .qm（GUI 运行时加载）
-	$(UV) run pyside6-lrelease $(I18N_TS) -qm $(I18N_QM)
+	"$(PYSIDE6_DIR)/lrelease" $(I18N_TS) -qm $(I18N_QM)
 
 # ---------------------------------------------------------------------------
 # C helper（供 cmdseal.py 调用；日常无需手动）

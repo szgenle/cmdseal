@@ -708,54 +708,54 @@ It will take effect after you restart the app.</source>
 <context>
     <name>RunnerListWindow</name>
     <message>
-        <location filename="../runner_list.py" line="138"/>
+        <location filename="../runner_list.py" line="167"/>
         <source>cmdseal · Sealed Runners</source>
         <translation>cmdseal · 已 seal 的 runner</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="144"/>
+        <location filename="../runner_list.py" line="173"/>
         <source>Refresh</source>
         <translation>刷新</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="153"/>
+        <location filename="../runner_list.py" line="192"/>
         <source>Label</source>
         <translation>标签</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="154"/>
+        <location filename="../runner_list.py" line="193"/>
         <source>Service</source>
         <translation>服务</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="155"/>
+        <location filename="../runner_list.py" line="194"/>
         <source>Template</source>
         <translation>模板</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="156"/>
+        <location filename="../runner_list.py" line="195"/>
         <source>Created</source>
         <translation>创建时间</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="174"/>
+        <location filename="../runner_list.py" line="214"/>
         <source>Close</source>
         <translation>关闭</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="193"/>
+        <location filename="../runner_list.py" line="238"/>
         <source>Loading…</source>
         <translation>加载中…</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="199"/>
-        <location filename="../runner_list.py" line="204"/>
-        <location filename="../runner_list.py" line="212"/>
+        <location filename="../runner_list.py" line="245"/>
+        <location filename="../runner_list.py" line="250"/>
+        <location filename="../runner_list.py" line="258"/>
         <source>Load failed</source>
         <translation>加载失败</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="207"/>
+        <location filename="../runner_list.py" line="253"/>
         <source>cmdseal.py list failed (rc={rc})
 
 {err}</source>
@@ -764,34 +764,34 @@ It will take effect after you restart the app.</source>
 {err}</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="214"/>
-        <location filename="../runner_list.py" line="358"/>
+        <location filename="../runner_list.py" line="260"/>
+        <location filename="../runner_list.py" line="436"/>
         <source>Unexpected error: {e}</source>
         <translation>意外错误：{e}</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="221"/>
+        <location filename="../runner_list.py" line="273"/>
         <source>{n} total · {live} live · {orphan} orphan · {legacy} legacy</source>
         <translation>共 {n} 条 · {live} 存活 · {orphan} 孤儿 · {legacy} legacy</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="244"/>
-        <location filename="../runner_list.py" line="288"/>
+        <location filename="../runner_list.py" line="306"/>
+        <location filename="../runner_list.py" line="366"/>
         <source>(legacy)</source>
         <translation>(legacy)</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="246"/>
+        <location filename="../runner_list.py" line="308"/>
         <source>(legacy, metadata unknown)</source>
         <translation>(legacy，元数据未知)</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="275"/>
+        <location filename="../runner_list.py" line="353"/>
         <source>Delete…</source>
         <translation>删除…</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="302"/>
+        <location filename="../runner_list.py" line="380"/>
         <source>Delete runner “{label}”?
 
 </source>
@@ -800,28 +800,28 @@ It will take effect after you restart the app.</source>
 </translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="303"/>
+        <location filename="../runner_list.py" line="381"/>
         <source>service : {svc}
 </source>
         <translation>service : {svc}
 </translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="304"/>
+        <location filename="../runner_list.py" line="382"/>
         <source>account : {acct}
 </source>
         <translation>account : {acct}
 </translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="307"/>
+        <location filename="../runner_list.py" line="385"/>
         <source>binary  : {out}
 </source>
         <translation>binary  : {out}
 </translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="318"/>
+        <location filename="../runner_list.py" line="396"/>
         <source>
 The following actions will run (not reversible):
 ① Remove K from the keychain (ciphertext becomes undecryptable)
@@ -836,7 +836,7 @@ No system authorization prompt will appear.If the file cannot be removed (e.g. p
 此操作不触发系统授权弹窗。若文件删除失败（如权限不足），会提示但 K 已删除无法回滚。</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="325"/>
+        <location filename="../runner_list.py" line="403"/>
         <source>
 The following actions will run (not reversible):
 ① Remove K from the keychain
@@ -851,7 +851,7 @@ No system authorization prompt will appear.</source>
 此操作不触发系统授权弹窗。</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="334"/>
+        <location filename="../runner_list.py" line="412"/>
         <source>
 The following actions will run (not reversible):
 ① Remove K from the keychain
@@ -869,22 +869,24 @@ No system authorization prompt will appear.</source>
 此操作不触发系统授权弹窗。</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="338"/>
+        <location filename="../runner_list.py" line="416"/>
         <source>Delete Runner</source>
         <translation>删除 runner</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="340"/>
+        <location filename="../runner_list.py" line="418"/>
+        <location filename="../runner_list.py" line="504"/>
         <source>Delete</source>
         <translation>删除</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="341"/>
+        <location filename="../runner_list.py" line="419"/>
+        <location filename="../runner_list.py" line="505"/>
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="353"/>
+        <location filename="../runner_list.py" line="431"/>
         <source>Delete failed (rc={rc})
 
 {err}</source>
@@ -893,7 +895,7 @@ No system authorization prompt will appear.</source>
 {err}</translation>
     </message>
     <message>
-        <location filename="../runner_list.py" line="372"/>
+        <location filename="../runner_list.py" line="450"/>
         <source>K was deleted but removing the binary failed:
 {path}
 
@@ -908,42 +910,51 @@ Please delete this file manually (it can no longer be run).</source>
 请手动删除该文件（已不能再解密运行）。</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="191"/>
         <source>Status</source>
         <translation>状态</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="177"/>
         <source>Garbage collect…</source>
         <translation>批量回收…</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="180"/>
         <source>Scan for orphaned keychain items (whose sealed binary on disk is gone) and delete them in bulk.</source>
         <translation>扫描孤儿的钥匙串条目（磁盘上的 sealed binary 已丢失）并批量删除。</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="316"/>
         <source>Binary missing on disk:
 {path}</source>
         <translation>磁盘上的 binary 已丢失：
 {path}</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="321"/>
         <source>No metadata; cannot be auto-gc&apos;d. Use right-click Delete if you know this runner.</source>
         <translation>没有元数据，无法自动 gc。如确知该 runner 归属，可右键手工删除。</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="323"/>
         <source>Binary exists:
 {path}</source>
         <translation>磁盘上的 binary 还在：
 {path}</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="463"/>
         <source>No orphaned items to garbage-collect.</source>
         <translation>没有可回收的孤儿条目。</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="475"/>
         <source>  …and {n} more</source>
         <translation>  …还有 {n} 条</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="483"/>
         <source>Garbage-collect {n} orphaned keychain item(s)?
 
 These items&apos; sealed binaries are no longer on disk, so the keychain entries cannot be used.
@@ -960,18 +971,22 @@ Items to delete:
 </translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="489"/>
         <source>Garbage collect</source>
         <translation>批量回收</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="495"/>
         <source>Dry run first (cross-check with cmdseal before deleting)</source>
         <translation>先空跑一次（用 cmdseal 交叉核对后再删除）</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="501"/>
         <source>If checked, run `cmdseal gc --dry-run --json` first and verify the orphan set hasn&apos;t changed since the table was populated; only then delete. Safer when the keychain may be modified concurrently by another tool.</source>
         <translation>勾选后，先跑 `cmdseal gc --dry-run --json` 确认孤儿集合在列表加载后没变过，再执行删除。当钥匙串可能被别的工具并发修改时更稳当。</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="528"/>
         <source>cmdseal gc --dry-run failed (rc={rc})
 
 {err}</source>
@@ -980,6 +995,7 @@ Items to delete:
 {err}</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="549"/>
         <source>Keychain state changed since the table was populated.
 
 Displayed orphans : {a}
@@ -994,6 +1010,7 @@ CLI 当前报告   ：{b}
 没有执行删除。请点 Refresh 重新加载后重试。</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="563"/>
         <source>cmdseal gc --yes failed (rc={rc})
 
 {err}</source>
@@ -1002,6 +1019,7 @@ CLI 当前报告   ：{b}
 {err}</translation>
     </message>
     <message>
+        <location filename="../runner_list.py" line="572"/>
         <source>Garbage collect complete: {n} item(s) deleted.
 
 Run `cmdseal gc --dry-run` from the terminal for a second opinion.</source>
@@ -1160,12 +1178,12 @@ Run `cmdseal gc --dry-run` from the terminal for a second opinion.</source>
     <message>
         <location filename="../seal_wizard.py" line="167"/>
         <source>Segment {i} (receives stdout of previous segment)</source>
-        <translation>段 {i}　（第 {i} 段 — 获得上一段 stdout）</translation>
+        <translation>段 {i}&#x3000;（第 {i} 段 — 获得上一段 stdout）</translation>
     </message>
     <message>
         <location filename="../seal_wizard.py" line="171"/>
         <source>Segment {i} (first segment — main command)</source>
-        <translation>段 {i}　（第一段 — 主命令）</translation>
+        <translation>段 {i}&#x3000;（第一段 — 主命令）</translation>
     </message>
     <message>
         <location filename="../seal_wizard.py" line="178"/>
