@@ -29,11 +29,24 @@ own independent version number and is not required to stay in lock-step.
 - **Tests.** `tests/test_gc.py` (pure-Python, CI-friendly; 7 cases
   covering classification, dry-run, interactive `--yes`, JSON
   read-only / destructive dispatch, and the no-orphan fast path).
+- **GUI: Manage Runners shows GC state & runs `gc`.** The
+  *Manage Runners* window now has a **Status** column tagging each
+  row as 🟢 *live* / 🟡 *orphan* / ⚫ *legacy* (orphans in amber),
+  a `N total · X live · Y orphan · Z legacy` status-bar summary,
+  and a **Garbage collect…** button that shells out to
+  `cmdseal gc --json`. The confirmation dialog includes a
+  **Dry run first** checkbox (on by default) that re-queries the
+  CLI in `--dry-run` mode and aborts on state mismatch — a
+  lightweight guard against concurrent keychain edits. GUI still
+  never touches the keychain directly; all decisions defer to
+  `cmdseal.py`. Test coverage: `tests/test_gui_gc.py` (8 cases).
 
 ### Docs
 
 - **USER_GUIDE §4.4**. New section documenting `cmdseal gc` —
-  decision tree, sample output, exit-code contract. Bilingual.
+  decision tree, sample output, exit-code contract. A **GUI users**
+  subsection covers the *Manage Runners* Status column, GC
+  button, and *Dry run first* safeguard. Bilingual.
 - **README “Known limitations”**. The “Planned: `cmdseal gc`
   subcommand” bullet now points at the shipped command. Bilingual.
 

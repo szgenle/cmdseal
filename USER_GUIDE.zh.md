@@ -505,6 +505,22 @@ orphaned keychain items (on-disk binary missing):
 **退出码**：`0` 表示成功（包括 dry-run），`1` 表示至少一条调 helper
 `delete` 失败。可以安全地从 CI 脚本（`set -e`）调用 `gc --yes`。
 
+**GUI 用户**。*Manage Runners* 窗口（`cmdseal-gui → Runners →
+Manage…`）把 `cmdseal gc` 看到的数据搬到了界面上：
+
+- **Status** 列把每一行标为 🟢 *live* / 🟡 *orphan* / ⚫
+  *legacy*，孤儿行以琥珀色前景高亮。
+- 状态栏汇总（`N 条 · X live · Y orphan · Z legacy`）与 CLI
+  的判定规则完全一致。
+- **Garbage collect…** 按钮端到端跑 `cmdseal gc`，没有孤儿
+  时自动禁用。确认对话框提供一个 **Dry run first** 复选框
+  （默认勾选）：勾选后会先以 `--dry-run --json` 再查一次
+  CLI，若期间 keychain 状态被并发修改则中止，防止误删。
+
+GUI 从不直接访问 keychain，所有操作都通过 subprocess 调
+`cmdseal.py gc --json`——CLI 和 GUI 对 live / orphan / legacy
+的判定永远自动对齐。
+
 ---
 
 ## 5. 占位符语法

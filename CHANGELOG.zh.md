@@ -27,11 +27,23 @@
 - **测试**。`tests/test_gc.py`（纯 Python、CI 友好；7 个用例
   涵盖分类、dry-run、交互式 `--yes`、JSON 只读/破坏性分发路径
   以及「无孤儿」快路径）。
+- **GUI：Manage Runners 可视化 GC 状态并一键回收**。
+  *Manage Runners* 窗口新增 **Status** 列，把每一行标为
+  🟢 *live* / 🟡 *orphan* / ⚫ *legacy*（孤儿行以琥珀色
+  前景高亮），状态栏汇总 `N 条 · X live · Y orphan · Z
+  legacy`，并新增 **Garbage collect…** 按钮，通过 subprocess
+  调 `cmdseal gc --json` 端到端执行。确认对话框带一个
+  **Dry run first** 复选框（默认勾选）：勾选后会先以
+  `--dry-run` 再查一次 CLI，若期间 keychain 状态被并发
+  修改则中止，防止误删。GUI 依然从不直接访问 keychain，
+  所有判定都交给 `cmdseal.py`。测试覆盖：
+  `tests/test_gui_gc.py`（8 个用例）。
 
 ### 文档
 
 - **USER_GUIDE §4.4**。新增章节记录 `cmdseal gc` 的判定规则、
-  输出示例、退出码契约。双语同步。
+  输出示例、退出码契约；另加一段 **GUI 用户** 介绍 *Manage
+  Runners* 的 Status 列、GC 按钮、*Dry run first* 保护。双语同步。
 - **README 「已知限制」**。原本「计划中：一个 `cmdseal gc`
   子命令」的条目现已指向已交付的命令。双语同步。
 

@@ -514,6 +514,24 @@ orphaned keychain items (on-disk binary missing):
 helper `delete` call failed. This makes `gc --yes` safe to chain
 from CI (`set -e`-friendly).
 
+**GUI users.** The *Manage Runners* window (`cmdseal-gui → Runners
+→ Manage…`) surfaces the same data as `cmdseal gc`:
+
+- A **Status** column tags every row as 🟢 *live* / 🟡 *orphan* /
+  ⚫ *legacy*, with orphan rows highlighted in amber.
+- The status-bar summary (`N total · X live · Y orphan · Z
+  legacy`) mirrors the CLI's decision tree.
+- A **Garbage collect…** button runs `cmdseal gc` end-to-end. It
+  auto-disables when no orphan is present. The confirmation
+  dialog offers a **Dry run first** checkbox (on by default) that
+  re-queries the CLI in `--dry-run --json` mode and aborts if the
+  keychain state changed since the table was populated — a
+  lightweight guard against concurrent edits.
+
+The GUI never talks to the keychain directly; it shells out to
+`cmdseal.py gc --json` so CLI and GUI always agree on what
+counts as live / orphan / legacy.
+
 ---
 
 ## 5. Placeholder Syntax

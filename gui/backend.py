@@ -175,3 +175,40 @@ def delete_runner(service: str, account: str) -> None:
     if res.returncode != 0:
         raise subprocess.CalledProcessError(
             res.returncode, res.args, res.stdout, res.stderr)
+
+
+def gc_runners(prefix: str = "cmdseal.", *, apply: bool = False) -> dict:
+    """调用 ``cmdseal.py gc --json`` 回收孤儿 keychain 条目。
+
+    参数：
+      ``apply=False``（默认）——走 ``--dry-run --json``，只扫描不删。
+      ``apply=True``          ——走 ``--yes --json``，实际执行删除。
+
+    返回解析后的 JSON dict，形如：
+      ``{"orphans": [...], "live": [...], "legacy": [...], "would_delete": bool}``
+
+    失败时抛 ``CalledProcessError``；UI 层自行捕获展示。
+    注：``cmdseal gc --yes --json`` 在有部分删除失败时会返回 rc=1，
+    但仍然会打印合法的 JSON。为了让 UI 层能看到部分结果，
+    这里不将 rc!=0 一律当成空失败；rc 和 stdout 都放在
+    ``CalledProcessError`` 里，调用方可自行决定是否解析。
+    """
+    if not CMDSEAL_PY.is_file():
+        raise FileNotFoundError(f"cmdseal.py not found at {CMDSEAL_PY}")
+    argv = [PYTHON_EXE, str(CMDSEAL_PY), "gc",
+            "--prefix", prefix, "--json"]
+    if apply:
+        argv.append("--yes")
+    else:
+        argv.append("--dry-run")
+    res = subprocess.run(
+        argv,
+        capture_output=True,
+        text=True,
+        cwd=str(PROJECT_ROOT),
+        env=os.environ.copy(),
+    )
+    if res.returncode != 0:
+        raise subprocess.CalledProcessError(
+            res.returncode, res.args, res.stdout, res.stderr)
+    return json.loads(res.stdout or "{}")

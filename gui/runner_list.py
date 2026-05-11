@@ -1,10 +1,16 @@
-"""Runner 管理窗口：只读列表，零钥匙串弹窗。
-
-Round 2 MVP 仅展示，不含详情/右键菜单/删除/rotate 等带副作用操作——那些留到
-Round 2.5 再做（参见决策：分阶段交付）。
+"""Runner 管理窗口：只读列表 + 孤儿 keychain 条目可视化 + 批量 gc。
 
 数据源：backend.list_sealed() → cmdseal.py list --json → cmdseal_helper list。
 路径已在 NEXT.md §5.19 实证为零弹窗。
+
+Status 列与 CLI `cmdseal gc` 的三分类语义对齐（classify_gc_items）：
+  🟢 live    — output_path 对应的文件存在
+  🟡 orphan  — output_path 已填但文件已消失，gc 会清掉
+  ⚫ legacy  — 没有元数据（v1.1 之前的条目），永不自动 gc
+
+批量 gc 按钮仅当存在孤儿时可用；确认对话框提供 "Dry run first" 复选框，
+勾选时先调 ``cmdseal gc --dry-run --json`` 做一次外部一致性校验，再
+调 ``--yes --json`` 真正执行，降低 keychain 期间被其它进程改动的风险。
 """
 from __future__ import annotations
 
@@ -20,6 +26,7 @@ from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QAction, QBrush, QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -32,10 +39,19 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .backend import delete_runner, list_sealed
+from .backend import delete_runner, gc_runners, list_sealed
 
 
-_COLS = ("Label", "Service", "Template", "Created")
+_COLS = ("Status", "Label", "Service", "Template", "Created")
+
+# Runner 状态展示文案。圆点用 Unicode（免 Qt icon 资源依赖）。
+# 与 CLI 端 `cmdseal gc` 的三分类语义对齐（classify_gc_items）。
+_STATUS_LIVE    = "🟢 live"
+_STATUS_ORPHAN  = "🟡 orphan"
+_STATUS_LEGACY  = "⚫ legacy"
+
+# 孤儿行的前景色：琥珀/橙色，比 legacy 灰更醒目，但不做背景色以保持克制。
+_ORPHAN_FG = QColor(0xC2, 0x71, 0x0C)
 
 # 占位符检测：token 里**包含** {{arg:N}} / {{secret:NAME}} 的按占位符处理，
 # 不打码（占位符本身是结构标记，不是值；真正的敏感值在运行时由用户补）。
@@ -129,6 +145,19 @@ def _format_created(meta: dict[str, Any] | None,
     return short, full
 
 
+def _classify_status(item: dict[str, Any]) -> str:
+    """与 CLI 端 ``classify_gc_items`` 语义一致的单条判定。
+
+    返回 ``"live" | "orphan" | "legacy"``。只走 ``os.path.exists``
+    做文件存在性检查（不触发 ACL 弹窗）。
+    """
+    meta = item.get("_meta")
+    out = (meta or {}).get("output_path") if meta else None
+    if not out:
+        return "legacy"
+    return "live" if os.path.exists(out) else "orphan"
+
+
 class RunnerListWindow(QWidget):
     """独立窗口，不依赖 parent 生命周期。"""
 
@@ -136,7 +165,7 @@ class RunnerListWindow(QWidget):
         # 独立顶层窗口：传 parent 只为 Qt 对象树回收，不做 modal
         super().__init__(parent, Qt.Window)
         self.setWindowTitle(self.tr("cmdseal · Sealed Runners"))
-        self.resize(820, 420)
+        self.resize(900, 440)
 
         self._status = QLabel("—")
         self._status.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
@@ -144,12 +173,22 @@ class RunnerListWindow(QWidget):
         self._btn_refresh = QPushButton(self.tr("Refresh"))
         self._btn_refresh.clicked.connect(self.refresh)
 
+        # 批量 gc 按钮。孤儿数 == 0 时 disabled；refresh() 末尾更新。
+        self._btn_gc = QPushButton(self.tr("Garbage collect…"))
+        self._btn_gc.setToolTip(self.tr(
+            "Scan for orphaned keychain items (whose sealed binary "
+            "on disk is gone) and delete them in bulk."))
+        self._btn_gc.setEnabled(False)
+        self._btn_gc.clicked.connect(self._on_gc_clicked)
+
         top = QHBoxLayout()
         top.addWidget(self._status, 1)
+        top.addWidget(self._btn_gc, 0)
         top.addWidget(self._btn_refresh, 0)
 
         self._table = QTableWidget(0, len(_COLS), self)
         self._table.setHorizontalHeaderLabels([
+            self.tr("Status"),
             self.tr("Label"),
             self.tr("Service"),
             self.tr("Template"),
@@ -166,10 +205,11 @@ class RunnerListWindow(QWidget):
         self._table.customContextMenuRequested.connect(self._on_context_menu)
 
         hh = self._table.horizontalHeader()
-        hh.setSectionResizeMode(0, QHeaderView.ResizeToContents)   # Label
-        hh.setSectionResizeMode(1, QHeaderView.ResizeToContents)   # Service
-        hh.setSectionResizeMode(2, QHeaderView.Stretch)            # Template
-        hh.setSectionResizeMode(3, QHeaderView.ResizeToContents)   # Created
+        hh.setSectionResizeMode(0, QHeaderView.ResizeToContents)   # Status
+        hh.setSectionResizeMode(1, QHeaderView.ResizeToContents)   # Label
+        hh.setSectionResizeMode(2, QHeaderView.ResizeToContents)   # Service
+        hh.setSectionResizeMode(3, QHeaderView.Stretch)            # Template
+        hh.setSectionResizeMode(4, QHeaderView.ResizeToContents)   # Created
 
         self._btn_close = QPushButton(self.tr("Close"))
         self._btn_close.clicked.connect(self.close)
@@ -183,6 +223,11 @@ class RunnerListWindow(QWidget):
         lay.addWidget(self._table, 1)
         lay.addLayout(bottom)
 
+        # 缓存上次 refresh 扫出的 orphan 条目（按 (service, account) 指纹），
+        # gc 对话框直接用，无需重算。Dry run 时与 CLI 返回的集合对比来
+        # 检测 keychain 期间的并发变动。
+        self._orphans_cache: list[dict[str, Any]] = []
+
         # 首开即加载一次
         self.refresh()
 
@@ -192,6 +237,7 @@ class RunnerListWindow(QWidget):
         """重新从 keychain 拉取并填表。subprocess 同步调用，~10ms 级。"""
         self._status.setText(self.tr("Loading…"))
         self._btn_refresh.setEnabled(False)
+        self._btn_gc.setEnabled(False)
         try:
             items = list_sealed()
         except FileNotFoundError as e:
@@ -215,19 +261,27 @@ class RunnerListWindow(QWidget):
             return
 
         self._populate(items)
+
+        # 汇总三分类统计 + 更新状态栏 + gc 按钮开关
         n = len(items)
-        legacy = sum(1 for it in items if not it.get("_meta"))
+        live = sum(1 for it in items if _classify_status(it) == "live")
+        orphans = [it for it in items if _classify_status(it) == "orphan"]
+        legacy = sum(1 for it in items if _classify_status(it) == "legacy")
+        self._orphans_cache = orphans
         self._status.setText(
-            self.tr("{n} total · {ok} with metadata · {legacy} legacy").format(
-                n=n, ok=n - legacy, legacy=legacy)
+            self.tr("{n} total · {live} live · {orphan} orphan · "
+                    "{legacy} legacy").format(
+                n=n, live=live, orphan=len(orphans), legacy=legacy)
         )
         self._btn_refresh.setEnabled(True)
+        self._btn_gc.setEnabled(len(orphans) > 0)
 
     # ---- internal --------------------------------------------------------
 
     def _populate(self, items: list[dict[str, Any]]) -> None:
         self._table.setRowCount(0)
         legacy_brush = QBrush(QColor(0x99, 0x99, 0x99))
+        orphan_brush = QBrush(_ORPHAN_FG)
 
         for it in items:
             row = self._table.rowCount()
@@ -235,6 +289,14 @@ class RunnerListWindow(QWidget):
 
             meta = it.get("_meta")
             svc = it.get("service", "?")
+            status = _classify_status(it)
+
+            if status == "live":
+                status_text = _STATUS_LIVE
+            elif status == "orphan":
+                status_text = _STATUS_ORPHAN
+            else:
+                status_text = _STATUS_LEGACY
 
             if meta:
                 label = str(meta.get("label") or "—")
@@ -246,13 +308,30 @@ class RunnerListWindow(QWidget):
             created_short, created_full = _format_created(
                 meta, it.get("created"))
 
-            cells = (label, svc, template, created_short)
-            tooltips = (label, svc, template, created_full or created_short)
+            cells = (status_text, label, svc, template, created_short)
+            # tooltip：Status 给出判定依据；其他列沿用原值
+            out_path = (meta or {}).get("output_path") or ""
+            if status == "orphan":
+                status_tip = self.tr(
+                    "Binary missing on disk:\n{path}").format(path=out_path)
+            elif status == "legacy":
+                status_tip = self.tr(
+                    "No metadata; cannot be auto-gc'd. "
+                    "Use right-click Delete if you know this runner.")
+            else:
+                status_tip = self.tr(
+                    "Binary exists:\n{path}").format(path=out_path)
+            tooltips = (
+                status_tip, label, svc, template,
+                created_full or created_short)
+
             for col, (val, tip) in enumerate(zip(cells, tooltips)):
                 cell = QTableWidgetItem(val)
                 cell.setToolTip(tip)  # Created 列 tooltip 显示完整 ISO
-                if meta is None:
+                if status == "legacy":
                     cell.setForeground(legacy_brush)
+                elif status == "orphan":
+                    cell.setForeground(orphan_brush)
                 self._table.setItem(row, col, cell)
             # 把整行原始 dict 存在第一列 UserRole，右键时取回
             self._table.item(row, 0).setData(Qt.UserRole, it)
@@ -268,7 +347,6 @@ class RunnerListWindow(QWidget):
         if anchor is None:
             return
         data = anchor.data(Qt.UserRole) or {}
-        meta = data.get("_meta")
 
         menu = QMenu(self._table)
 
@@ -372,3 +450,126 @@ class RunnerListWindow(QWidget):
                     ).format(path=binary_path, err=e))
 
         self.refresh()
+
+    # ---- gc --------------------------------------------------------------
+
+    def _on_gc_clicked(self) -> None:
+        """批量 gc 入口：确认对话框 → (可选 dry-run 校验) → 执行删除 → 刷新。"""
+        orphans = list(self._orphans_cache)
+        if not orphans:
+            # 理论上不会触发（按钮已 disabled），兜底防御。
+            QMessageBox.information(
+                self, "cmdseal",
+                self.tr("No orphaned items to garbage-collect."))
+            return
+
+        # 构造清单文案：最多列 10 条，超出折叠为 "…and N more"。
+        preview_lines = []
+        shown = orphans[:10]
+        for it in shown:
+            meta = it.get("_meta") or {}
+            lab = str(meta.get("label") or "—")
+            svc = str(it.get("service") or "?")
+            preview_lines.append(f"  • {lab}  [{svc}]")
+        if len(orphans) > len(shown):
+            preview_lines.append(self.tr("  …and {n} more").format(
+                n=len(orphans) - len(shown)))
+        preview = "\n".join(preview_lines)
+
+        msg = (
+            self.tr("Garbage-collect {n} orphaned keychain item(s)?\n\n"
+                    "These items' sealed binaries are no longer on disk, "
+                    "so the keychain entries cannot be used.\n\n"
+                    "Items to delete:\n{preview}\n").format(
+                n=len(orphans), preview=preview)
+        )
+
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle(self.tr("Garbage collect"))
+        box.setText(msg)
+        # Dry run first 复选框：默认勾选。先调 `gc --dry-run --json` 让 CLI
+        # 侧独立确认一次，再跑 `--yes`；若 dry-run 看到的孤儿集合与本地
+        # 缓存不一致（keychain 期间被改动），中止并提示刷新。
+        chk = QCheckBox(self.tr(
+            "Dry run first (cross-check with cmdseal before deleting)"))
+        chk.setChecked(True)
+        chk.setToolTip(self.tr(
+            "If checked, run `cmdseal gc --dry-run --json` first and verify "
+            "the orphan set hasn't changed since the table was populated; "
+            "only then delete. Safer when the keychain may be modified "
+            "concurrently by another tool."))
+        box.setCheckBox(chk)
+        btn_del = box.addButton(
+            self.tr("Delete"), QMessageBox.DestructiveRole)
+        box.addButton(self.tr("Cancel"), QMessageBox.RejectRole)
+        box.setDefaultButton(btn_del)
+        box.exec()
+        if box.clickedButton() is not btn_del:
+            return
+
+        self._run_gc(orphans, dry_run_first=chk.isChecked())
+
+    def _run_gc(self, expected_orphans: list[dict[str, Any]],
+                *, dry_run_first: bool) -> None:
+        """执行批量 gc。``expected_orphans`` 是 UI 表格当前看到的孤儿集合。"""
+        self._btn_gc.setEnabled(False)
+        self._btn_refresh.setEnabled(False)
+        try:
+            if dry_run_first:
+                # 1) 先 dry-run，读 CLI 看到的孤儿集合
+                try:
+                    report = gc_runners(apply=False)
+                except subprocess.CalledProcessError as e:
+                    QMessageBox.critical(
+                        self, "cmdseal",
+                        self.tr(
+                            "cmdseal gc --dry-run failed (rc={rc})\n\n"
+                            "{err}").format(
+                            rc=e.returncode, err=e.stderr or ""))
+                    return
+
+                cli_orphans = [
+                    (o.get("service"), o.get("account"))
+                    for o in report.get("orphans") or []
+                ]
+                local_orphans = [
+                    (it.get("service"), it.get("account"))
+                    for it in expected_orphans
+                ]
+                if sorted(cli_orphans) != sorted(local_orphans):
+                    QMessageBox.warning(
+                        self, "cmdseal",
+                        self.tr(
+                            "Keychain state changed since the table was "
+                            "populated.\n\n"
+                            "Displayed orphans : {a}\n"
+                            "CLI now reports   : {b}\n\n"
+                            "Nothing was deleted. Please click Refresh and "
+                            "try again.").format(
+                            a=len(local_orphans), b=len(cli_orphans)))
+                    return
+
+            # 2) 真删
+            try:
+                report = gc_runners(apply=True)
+            except subprocess.CalledProcessError as e:
+                # 部分失败也会走这里（cmdseal gc --yes --json 在有删除失败
+                # 时 rc=1）；尽量把部分结果展示出来。
+                QMessageBox.critical(
+                    self, "cmdseal",
+                    self.tr(
+                        "cmdseal gc --yes failed (rc={rc})\n\n"
+                        "{err}").format(
+                        rc=e.returncode, err=e.stderr or ""))
+                return
+
+            deleted = len(report.get("orphans") or [])
+            QMessageBox.information(
+                self, "cmdseal",
+                self.tr("Garbage collect complete: {n} item(s) deleted.\n\n"
+                        "Run `cmdseal gc --dry-run` from the terminal for a "
+                        "second opinion.").format(n=deleted))
+        finally:
+            # refresh() 会自己 re-enable 这些按钮
+            self.refresh()

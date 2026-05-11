@@ -771,8 +771,8 @@ It will take effect after you restart the app.</source>
     </message>
     <message>
         <location filename="../runner_list.py" line="221"/>
-        <source>{n} total · {ok} with metadata · {legacy} legacy</source>
-        <translation>共 {n} 条 · {ok} 条带元数据 · {legacy} 条 legacy</translation>
+        <source>{n} total · {live} live · {orphan} orphan · {legacy} legacy</source>
+        <translation>共 {n} 条 · {live} 存活 · {orphan} 孤儿 · {legacy} legacy</translation>
     </message>
     <message>
         <location filename="../runner_list.py" line="244"/>
@@ -906,6 +906,108 @@ Please delete this file manually (it can no longer be run).</source>
 {err}
 
 请手动删除该文件（已不能再解密运行）。</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>状态</translation>
+    </message>
+    <message>
+        <source>Garbage collect…</source>
+        <translation>批量回收…</translation>
+    </message>
+    <message>
+        <source>Scan for orphaned keychain items (whose sealed binary on disk is gone) and delete them in bulk.</source>
+        <translation>扫描孤儿的钥匙串条目（磁盘上的 sealed binary 已丢失）并批量删除。</translation>
+    </message>
+    <message>
+        <source>Binary missing on disk:
+{path}</source>
+        <translation>磁盘上的 binary 已丢失：
+{path}</translation>
+    </message>
+    <message>
+        <source>No metadata; cannot be auto-gc&apos;d. Use right-click Delete if you know this runner.</source>
+        <translation>没有元数据，无法自动 gc。如确知该 runner 归属，可右键手工删除。</translation>
+    </message>
+    <message>
+        <source>Binary exists:
+{path}</source>
+        <translation>磁盘上的 binary 还在：
+{path}</translation>
+    </message>
+    <message>
+        <source>No orphaned items to garbage-collect.</source>
+        <translation>没有可回收的孤儿条目。</translation>
+    </message>
+    <message>
+        <source>  …and {n} more</source>
+        <translation>  …还有 {n} 条</translation>
+    </message>
+    <message>
+        <source>Garbage-collect {n} orphaned keychain item(s)?
+
+These items&apos; sealed binaries are no longer on disk, so the keychain entries cannot be used.
+
+Items to delete:
+{preview}
+</source>
+        <translation>确认批量回收 {n} 个孤儿钥匙串条目？
+
+这些条目对应的 sealed binary 已不在磁盘上，留着也无法被使用。
+
+将删除的条目：
+{preview}
+</translation>
+    </message>
+    <message>
+        <source>Garbage collect</source>
+        <translation>批量回收</translation>
+    </message>
+    <message>
+        <source>Dry run first (cross-check with cmdseal before deleting)</source>
+        <translation>先空跑一次（用 cmdseal 交叉核对后再删除）</translation>
+    </message>
+    <message>
+        <source>If checked, run `cmdseal gc --dry-run --json` first and verify the orphan set hasn&apos;t changed since the table was populated; only then delete. Safer when the keychain may be modified concurrently by another tool.</source>
+        <translation>勾选后，先跑 `cmdseal gc --dry-run --json` 确认孤儿集合在列表加载后没变过，再执行删除。当钥匙串可能被别的工具并发修改时更稳当。</translation>
+    </message>
+    <message>
+        <source>cmdseal gc --dry-run failed (rc={rc})
+
+{err}</source>
+        <translation>cmdseal gc --dry-run 失败（rc={rc}）
+
+{err}</translation>
+    </message>
+    <message>
+        <source>Keychain state changed since the table was populated.
+
+Displayed orphans : {a}
+CLI now reports   : {b}
+
+Nothing was deleted. Please click Refresh and try again.</source>
+        <translation>钥匙串状态在列表加载后发生了变化。
+
+表格已显示孤儿 ：{a}
+CLI 当前报告   ：{b}
+
+没有执行删除。请点 Refresh 重新加载后重试。</translation>
+    </message>
+    <message>
+        <source>cmdseal gc --yes failed (rc={rc})
+
+{err}</source>
+        <translation>cmdseal gc --yes 失败（rc={rc}）
+
+{err}</translation>
+    </message>
+    <message>
+        <source>Garbage collect complete: {n} item(s) deleted.
+
+Run `cmdseal gc --dry-run` from the terminal for a second opinion.</source>
+        <translation>批量回收完成：已删除 {n} 条。
+
+如需二次核对，可在终端跑 `cmdseal gc --dry-run`。</translation>
     </message>
 </context>
 <context>
