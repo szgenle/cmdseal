@@ -23,6 +23,7 @@
   - [4.1 seal — Seal a Command](#41-seal--seal-a-command)
   - [4.2 rotate — Rotate the Key](#42-rotate--rotate-the-key)
   - [4.3 list — List Runners](#43-list--list-runners)
+  - [4.4 gc — Reap Orphaned Keychain Items](#44-gc--reap-orphaned-keychain-items)
 - [5. Placeholder Syntax](#5-placeholder-syntax)
   - [5.1 Basic Rules](#51-basic-rules)
   - [5.2 Example Scenarios](#52-example-scenarios)
@@ -450,6 +451,68 @@ ZIP encryption     cmdseal.d4e5f6.K                 zip -j -P {{secret:zippw}} {
 - **Label** — friendly label.
 - **Service** — keychain service name.
 - **Template** — command template (positional arguments masked as `***`).
+
+---
+
+### 4.4 gc — Reap Orphaned Keychain Items
+
+When a sealed binary is deleted from disk (say, by `rm`), its
+matching `cmdseal.<hash>.K` keychain entry is left behind — ACL-
+bound to a `cdhash` that no longer has a file pointing at it. These
+entries are harmless (the ACL still forbids any caller from reading
+them) but they accumulate in `Keychain Access.app`. `gc` reaps them.
+
+**Decision tree**: every item returned by `cmdseal list` is
+classified by reading its `kSecAttrComment` metadata (this read
+triggers no ACL prompt, see DESIGN.md §9):
+
+| Category  | Condition                                | gc action            |
+|-----------|------------------------------------------|----------------------|
+| **live**  | `output_path` points at a file on disk   | leave alone          |
+| **orphan**| `output_path` set but the file is gone   | offer to delete      |
+| **legacy**| no metadata (sealed before v1.1)         | reported; manual only|
+
+Legacy items are never auto-deleted — without metadata there is no
+way to know which binary they belong to, so an automatic sweep
+could brick a runner you still use.
+
+**Basic usage**:
+
+```bash
+# 1. Audit first (read-only, no confirmation, no deletion):
+python3 cmdseal.py gc --dry-run
+
+# 2. Reap interactively (asks "Delete these N items? [y/N]"):
+python3 cmdseal.py gc
+
+# 3. Non-interactive (scripts / cron):
+python3 cmdseal.py gc --yes
+
+# 4. Machine-readable audit output (JSON; read-only unless --yes):
+python3 cmdseal.py gc --dry-run --json
+```
+
+**Sample output** (audit mode):
+
+```
+scanned 3 sealed runner(s) with prefix 'cmdseal.':
+  live      : 1
+  orphaned  : 1
+  legacy    : 1  (no metadata; not eligible for auto-gc)
+
+orphaned keychain items (on-disk binary missing):
+  • service     : cmdseal.abc123def456.K
+    label       : cmdseal sealed: old_zip
+    output_path : /Users/you/bin/old_zip
+    template    : zip -P *** *** {{arg:1}}
+    created     : 2026-03-01T10:00:00+00:00
+
+--dry-run: would delete 1 keychain item(s). Re-run without --dry-run to proceed.
+```
+
+**Exit codes**: `0` on clean run (including dry-run), `1` if any
+helper `delete` call failed. This makes `gc --yes` safe to chain
+from CI (`set -e`-friendly).
 
 ---
 

@@ -10,6 +10,33 @@ on the `cmdseal` (CLI + runner) surface. The `cmdseal-gui` PySide6
 front-end package in [`pyproject.toml`](./pyproject.toml) carries its
 own independent version number and is not required to stay in lock-step.
 
+## [Unreleased]
+
+### Added
+
+- **`cmdseal gc` subcommand.** Reap `cmdseal.*` keychain items
+  whose on-disk sealed binary has been removed, so the entries no
+  longer pile up in `Keychain Access.app`. The command classifies
+  every item into **live** / **orphan** / **legacy** by reading
+  `kSecAttrComment` metadata (zero ACL prompts). Orphans are
+  reported and — unless `--dry-run` — deleted after user
+  confirmation (`--yes` skips the prompt for CI use). Legacy
+  items (sealed before metadata was written, v1.1 and older) are
+  never touched automatically and are listed for manual review.
+  Output modes: interactive table (default), `--json` for
+  scripting (read-only unless `--yes` is passed). Fulfils a
+  long-standing entry in README's “Known limitations”.
+- **Tests.** `tests/test_gc.py` (pure-Python, CI-friendly; 7 cases
+  covering classification, dry-run, interactive `--yes`, JSON
+  read-only / destructive dispatch, and the no-orphan fast path).
+
+### Docs
+
+- **USER_GUIDE §4.4**. New section documenting `cmdseal gc` —
+  decision tree, sample output, exit-code contract. Bilingual.
+- **README “Known limitations”**. The “Planned: `cmdseal gc`
+  subcommand” bullet now points at the shipped command. Bilingual.
+
 ## [1.2.1] - 2026-05-05
 
 GUI companion release for v1.2. Brings the multi-segment pipe

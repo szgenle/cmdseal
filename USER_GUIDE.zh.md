@@ -23,6 +23,7 @@
   - [4.1 seal - 封存命令](#41-seal---封存命令)
   - [4.2 rotate - 轮换密钥](#42-rotate---轮换密钥)
   - [4.3 list - 列出 Runner](#43-list---列出-runner)
+  - [4.4 gc - 收割孤儿 Keychain 条目](#44-gc---收割孤儿-keychain-条目)
 - [5. 占位符语法](#5-占位符语法)
   - [5.1 基本规则](#51-基本规则)
   - [5.2 示例场景](#52-示例场景)
@@ -444,6 +445,65 @@ ZIP 加密           cmdseal.d4e5f6.K                 zip -j -P {{secret:zippw}}
 - **Label** - 标签名
 - **Service** - Keychain service 名称
 - **Template** - 命令模板（位置参数已掩码为 `***`）
+
+---
+
+### 4.4 gc - 收割孤儿 Keychain 条目
+
+当某个封存二进制被从磁盘上删除（例如用 `rm`）时，
+它对应的 `cmdseal.<hash>.K` keychain 条目会被留在原地——
+这条 ACL 绑定的 `cdhash` 已经没有文件对应了。这些条目
+无害（ACL 仍然拒绝任何 caller 读取），但会在「钥匙
+串访问.app」中积累。`gc` 子命令用来回收它们。
+
+**判定规则**：`cmdseal list` 返回的每条记录按 `kSecAttrComment`
+元数据分类（读这条元数据不会触发 ACL 弹窗，见 DESIGN.md §9）：
+
+| 分类      | 条件                                       | gc 动作             |
+|-----------|--------------------------------------------|---------------------|
+| **live**  | `output_path` 对应的文件存在               | 保留                |
+| **orphan**| `output_path` 已填但文件已消失             | 提议删除            |
+| **legacy**| 没有元数据（v1.1 之前的条目）              | 报告，由用户手工处理  |
+
+legacy 条目永远不被自动删除——没有元数据我们无法知道它对应哪
+个二进制，自动扫掉会有误杀仍在使用的 runner 的风险。
+
+**基本用法**：
+
+```bash
+# 1. 先审计（只读，不确认不删除）：
+python3 cmdseal.py gc --dry-run
+
+# 2. 交互式回收（会问「Delete these N items? [y/N]」）：
+python3 cmdseal.py gc
+
+# 3. 非交互（脚本 / cron）：
+python3 cmdseal.py gc --yes
+
+# 4. 机读 JSON 审计输出（默认只读，除非同时传 --yes）：
+python3 cmdseal.py gc --dry-run --json
+```
+
+**输出示例**（审计模式）：
+
+```
+scanned 3 sealed runner(s) with prefix 'cmdseal.':
+  live      : 1
+  orphaned  : 1
+  legacy    : 1  (no metadata; not eligible for auto-gc)
+
+orphaned keychain items (on-disk binary missing):
+  • service     : cmdseal.abc123def456.K
+    label       : cmdseal sealed: old_zip
+    output_path : /Users/you/bin/old_zip
+    template    : zip -P *** *** {{arg:1}}
+    created     : 2026-03-01T10:00:00+00:00
+
+--dry-run: would delete 1 keychain item(s). Re-run without --dry-run to proceed.
+```
+
+**退出码**：`0` 表示成功（包括 dry-run），`1` 表示至少一条调 helper
+`delete` 失败。可以安全地从 CI 脚本（`set -e`）调用 `gc --yes`。
 
 ---
 

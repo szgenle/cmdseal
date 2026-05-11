@@ -275,7 +275,9 @@ it is gated on the maintainer joining the Apple Developer Program.
 - **No registry** of which `cmdseal.<hash>.K` service belongs to
   which binary beyond `strings <binary> | grep cmdseal`.
 - **No automatic cleanup** of keychain items when a sealed binary is
-  deleted. Planned: a `cmdseal gc` subcommand.
+  deleted. Run `python3 cmdseal.py gc --dry-run` to audit orphans,
+  then re-run without `--dry-run` to reap them. (GUI integration
+  into **Manage Runners...** is planned.)
 - **No argument whitelisting** — `{{arg:N}}` is passed to the target
   command verbatim. If the target command is picky about what values
   it accepts, that is on the target.

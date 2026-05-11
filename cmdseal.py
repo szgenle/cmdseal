@@ -835,6 +835,198 @@ def do_delete(args):
 
 
 # ----------------------------------------------------------------------
+# gc: reap keychain items whose on-disk sealed binary is gone
+# ----------------------------------------------------------------------
+
+def classify_gc_items(items):
+    """Split a list of `cmdseal list` items into gc categories.
+
+    Pure function — does no keychain / filesystem mutation, and does
+    the only filesystem check through :func:`os.path.exists` (no ACL
+    prompts). The split rules are the single source of truth for
+    :func:`do_gc` and its test suite.
+
+    Categories:
+
+    * ``orphans``  — item whose ``_meta.output_path`` is set but the
+      referenced file does **not** exist on disk. These are the ones
+      ``gc`` will offer to delete.
+    * ``live``     — item whose ``output_path`` exists. Left alone.
+    * ``legacy``   — item has no ``_meta`` / no ``output_path``. We
+      refuse to touch these automatically — without metadata we can't
+      know which binary they belong to, so an automatic delete could
+      brick a runner the user still uses. Reported for manual review.
+
+    Every item must carry a non-empty ``service`` field; items that
+    lack one are dropped into ``legacy`` (defensive — a real keychain
+    item always has one, but a malformed JSON blob from the helper
+    shouldn't crash gc).
+    """
+    orphans, live, legacy = [], [], []
+    for it in items:
+        svc = it.get("service") or ""
+        if not svc:
+            legacy.append(it)
+            continue
+        meta = it.get("_meta")
+        out = (meta or {}).get("output_path") if meta else None
+        if not out:
+            legacy.append(it)
+            continue
+        if os.path.exists(out):
+            live.append(it)
+        else:
+            orphans.append(it)
+    return orphans, live, legacy
+
+
+def _print_gc_item(it):
+    meta = it.get("_meta") or {}
+    print(f"  • service     : {it.get('service', '?')}")
+    if meta.get("label"):
+        print(f"    label       : {meta['label']}")
+    if meta.get("output_path"):
+        print(f"    output_path : {meta['output_path']}")
+    if meta.get("template"):
+        print(f"    template    : {meta['template']}")
+    if meta.get("created_at"):
+        print(f"    created     : {meta['created_at']}")
+
+
+def do_gc(args):
+    """Reap keychain items whose on-disk sealed binary is gone.
+
+    Decision tree:
+
+    1. List all ``cmdseal.*`` keychain items via ``cmdseal_helper list``
+       (zero ACL prompts — see NEXT.md §5.19).
+    2. For each item, parse ``kSecAttrComment`` JSON and check whether
+       ``output_path`` still exists on disk.
+    3. Items with missing binaries are **orphans**; items without
+       metadata are **legacy** and never touched automatically.
+
+    Flags:
+
+    * ``--dry-run``   show what would be deleted, change nothing
+    * ``--yes``       skip interactive confirmation
+    * ``--json``      emit machine-readable summary (implies
+                       ``--dry-run`` unless ``--yes`` is also passed)
+    * ``--prefix``    filter service prefix (default ``cmdseal.``)
+    """
+    check_platform_and_tools()
+    items = kc_list(args.prefix)
+
+    # Parse comment JSON into _meta (mirrors do_list).
+    for it in items:
+        raw = it.get("comment")
+        if raw:
+            try:
+                it["_meta"] = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                it["_meta"] = None
+        else:
+            it["_meta"] = None
+
+    orphans, live, legacy = classify_gc_items(items)
+
+    if args.json:
+        # Machine-readable output is the same in dry-run and apply
+        # mode; the actual deletion status is reflected by the
+        # process exit code (0 = clean run, nonzero = helper failure
+        # somewhere).
+        def _compact(lst):
+            return [
+                {
+                    "service": x.get("service"),
+                    "account": x.get("account"),
+                    "output_path": (x.get("_meta") or {}).get("output_path"),
+                    "label": (x.get("_meta") or {}).get("label"),
+                    "created_at": (x.get("_meta") or {}).get("created_at"),
+                }
+                for x in lst
+            ]
+        print(json.dumps({
+            "orphans": _compact(orphans),
+            "live": _compact(live),
+            "legacy": _compact(legacy),
+            "would_delete": args.dry_run or not args.yes,
+        }, ensure_ascii=False, indent=2))
+        if args.dry_run or not args.yes:
+            return 0
+        # --json --yes: fall through to the deletion path below.
+
+    if not args.json:
+        print(f"scanned {len(items)} sealed runner(s) with prefix "
+              f"{args.prefix!r}:")
+        print(f"  live      : {len(live)}")
+        print(f"  orphaned  : {len(orphans)}")
+        print(f"  legacy    : {len(legacy)}  "
+              "(no metadata; not eligible for auto-gc)")
+        print()
+
+    if not orphans:
+        if not args.json:
+            print("nothing to do — no orphaned keychain items found.")
+            if legacy:
+                print()
+                print("legacy items (manual review; delete with "
+                      "`cmdseal delete --service <svc>`):")
+                for it in legacy:
+                    _print_gc_item(it)
+        return 0
+
+    if not args.json:
+        print("orphaned keychain items (on-disk binary missing):")
+        for it in orphans:
+            _print_gc_item(it)
+        print()
+
+    if args.dry_run:
+        if not args.json:
+            print(f"--dry-run: would delete {len(orphans)} keychain "
+                  "item(s). Re-run without --dry-run to proceed.")
+        return 0
+
+    if not args.yes:
+        try:
+            resp = input(
+                f"Delete these {len(orphans)} keychain item(s)? [y/N]: "
+            ).strip().lower()
+        except EOFError:
+            resp = ""
+        if resp not in ("y", "yes"):
+            print("aborted (no changes).")
+            return 0
+
+    failures = 0
+    for it in orphans:
+        svc = it.get("service")
+        acct = it.get("account") or args.user
+        try:
+            kc_delete(svc, acct)
+            if not args.json:
+                print(f"  ✓ deleted {svc}")
+        except SystemExit as e:
+            # kc_delete calls sys.exit on hard failure; soften it
+            # here so one bad item doesn't abort the whole sweep.
+            failures += 1
+            if not args.json:
+                print(f"  ✗ failed {svc}: {e}")
+
+    if not args.json:
+        if legacy:
+            print()
+            print("legacy items (manual review; delete with "
+                  "`cmdseal delete --service <svc>`):")
+            for it in legacy:
+                _print_gc_item(it)
+        print()
+        print(f"cmdseal gc: {len(orphans) - failures} deleted, "
+              f"{failures} failed, {len(legacy)} legacy skipped.")
+    return 1 if failures else 0
+
+
+# ----------------------------------------------------------------------
 # CLI
 # ----------------------------------------------------------------------
 
@@ -905,10 +1097,25 @@ def parse_args():
     pd.add_argument("--user", default=os.environ.get("USER", "root"),
                     help="account name (default: $USER)")
 
+    pg = sub.add_parser("gc",
+                        help="garbage-collect orphaned keychain items "
+                             "(whose sealed binary on disk is gone)")
+    pg.add_argument("--prefix", default="cmdseal.",
+                    help="service prefix to match (default: cmdseal.)")
+    pg.add_argument("--user", default=os.environ.get("USER", "root"),
+                    help="account name for delete calls (default: $USER)")
+    pg.add_argument("--dry-run", action="store_true",
+                    help="list what would be deleted; change nothing")
+    pg.add_argument("--yes", action="store_true",
+                    help="skip interactive confirmation")
+    pg.add_argument("--json", action="store_true",
+                    help="emit machine-readable JSON summary (implies "
+                         "--dry-run unless --yes is also passed)")
+
     # Back-compat: if the user passes --command/--output at the top
     # level with no subcommand, treat as `seal`.
     if len(sys.argv) >= 2 and sys.argv[1] not in (
-            "seal", "rotate", "list", "delete",
+            "seal", "rotate", "list", "delete", "gc",
             "-h", "--help"):
         # Inject default subcommand.
         args = p.parse_args(["seal"] + sys.argv[1:])
@@ -930,6 +1137,8 @@ def main():
         return do_list(args)
     elif args.subcommand == "delete":
         return do_delete(args)
+    elif args.subcommand == "gc":
+        return do_gc(args)
     else:
         sys.exit(f"cmdseal: unknown subcommand {args.subcommand!r}")
 

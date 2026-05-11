@@ -254,7 +254,9 @@ python3 cmdseal.py list --json
 - **没有注册表** 来记录哪个 `cmdseal.<hash>.K` 服务对应
   哪个二进制，除了 `strings <binary> | grep cmdseal`。
 - **删除被封存二进制时不会自动清理** keychain 条目。
-  计划中：一个 `cmdseal gc` 子命令。
+  运行 `python3 cmdseal.py gc --dry-run` 审计孤儿条目，去掉
+  `--dry-run` 再跑一次即可回收。（GUI 的 **运行器管理...**
+  里集成这一能力在规划中。）
 - **没有参数白名单** — `{{arg:N}}` 会原样传递给目标
   命令。如果目标命令对接受的值有严格要求，那是目标的责任。
 - **仅 macOS。** Linux（`libsecret`）/ Windows（DPAPI）是

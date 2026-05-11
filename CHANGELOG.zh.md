@@ -10,6 +10,31 @@
 [`pyproject.toml`](./pyproject.toml) 中的 `cmdseal-gui`（PySide6
 前端包）拥有独立的版本号，不需要与之保持同步。
 
+## [Unreleased]
+
+### 新增
+
+- **`cmdseal gc` 子命令**。回收磁盘上已不存在的 sealed binary
+  所对应的孤儿 `cmdseal.*` keychain 条目，避免它们在「钥匙
+  串访问.app」中积累。命令按 `kSecAttrComment` 元数据将每条
+  条目分类为 **live** / **orphan** / **legacy**（零 ACL 弹窗）。
+  孤儿条目会被报告，并在用户确认后删除（`--dry-run`
+  仅审计，`--yes` 跳过确认用于 CI）。legacy 条目（v1.1 及
+  更早版本封存时还没写入元数据）永不被自动删除，会列
+  出以供用户手工处理。输出模式：交互式表格（默认），
+  `--json` 适合脚本（默认只读，除非同时传 `--yes`）。
+  兑现了 README 「已知限制」中长期挂账的一项。
+- **测试**。`tests/test_gc.py`（纯 Python、CI 友好；7 个用例
+  涵盖分类、dry-run、交互式 `--yes`、JSON 只读/破坏性分发路径
+  以及「无孤儿」快路径）。
+
+### 文档
+
+- **USER_GUIDE §4.4**。新增章节记录 `cmdseal gc` 的判定规则、
+  输出示例、退出码契约。双语同步。
+- **README 「已知限制」**。原本「计划中：一个 `cmdseal gc`
+  子命令」的条目现已指向已交付的命令。双语同步。
+
 ## [1.2.1] - 2026-05-05
 
 v1.2 的 GUI 配套版本。将 CLI 端已具备的多段管道能力带到
