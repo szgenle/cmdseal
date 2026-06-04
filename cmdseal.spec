@@ -9,7 +9,7 @@ a = Analysis(
     ['run_gui.py'],
     pathex=['.'],
     binaries=[],
-    datas=[('cmdseal.py', 'assets'), ('cmdseal_helper.c', 'assets'), ('runner_aead_template.c', 'assets')],
+    datas=[('cmdseal.py', 'assets'), ('cmdseal_helper.c', 'assets'), ('runner_aead_template.c', 'assets'), ('gui/translations/cmdseal_zh_CN.qm', 'gui/translations')],
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
