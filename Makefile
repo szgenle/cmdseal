@@ -3,12 +3,18 @@
 # 常用：
 #   make             查看所有目标
 #   make sync        安装运行时依赖（PySide6）
-#   make run         启动 GUI
-#   make smoke       无头烟囱测试（CI/本地自检）
-#   make helper      编译 cmdseal_helper（CLI 首次运行会自动触发，这里供手动）
-#   make app         使用 pyinstaller 打包 .app（需 make sync-pkg 先拉依赖）
-#   make clean       清构建产物（_build/、dist/、build/）
-#   make distclean   清 .venv 与锁缓存（重装前用）
+#  sync-pkg        安装运行时依赖 + 打包分组（pyinstaller）
+#  lock            刷新 uv.lock（不升级）
+#  upgrade         升级所有依赖并同步 venv
+#  run             启动 GUI（python -m gui）
+#  smoke           无头自检：构造主窗口 + seal 向导后立刻退出
+#  i18n-update     从源码扫出最新 UI 字符串到 .ts
+#  i18n-release    编译 .ts -> .qm（GUI 运行时加载）
+#  helper          手动编译 + ad-hoc 签名 cmdseal_helper
+#  app             打包 .app（需 packaging 依赖）
+#  install         打包并安装 .app 到 /Applications
+#  clean           删除构建产物（_build/ build/ dist/ __pycache__/）
+#  distclean       额外清 .venv（重装前用）
 
 SHELL := /bin/zsh
 PROJECT_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
@@ -127,6 +133,14 @@ app: sync-pkg ## 打包 .app（需 packaging 依赖）
 		--add-data runner_aead_template.c:assets \
 		--add-data gui/translations/cmdseal_zh_CN.qm:gui/translations \
 		run_gui.py
+
+# ---------------------------------------------------------------------------
+# 安装
+# ---------------------------------------------------------------------------
+.PHONY: install
+install: app ## 打包并安装 .app 到 /Applications
+	@cp -R dist/cmdseal.app /Applications/
+	@echo "✓ 已安装到 /Applications/cmdseal.app"
 
 # ---------------------------------------------------------------------------
 # 清理
