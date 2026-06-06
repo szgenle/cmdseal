@@ -86,7 +86,7 @@ cd cmdseal
 
 # 2. Seal a command (you will be prompted for the secret interactively)
 python3 cmdseal.py seal \
-    --command 'zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}' \
+    --command 'sh -c "7zz a -tzip -mem=AES256 -p\"$1\" \"$2\" \"$3\"" _ {{secret:zippw}} {{arg:1}} {{arg:2}}' \
     --output ./my_sealed_zip
 
 # 3. Use the sealed binary
@@ -119,7 +119,7 @@ open dist/cmdseal.app
 
 | Type | Example | Description |
 |------|---------|-------------|
-| **Literal password** | `zip -j -P mypassword` | Written verbatim into the command (simple, not recommended for high-security cases). |
+| **Literal password** | `7zz a -tzip -mem=AES256 -pmypassword` | Written verbatim into the command (simple, not recommended for high-security cases). |
 | **Secret placeholder** | `{{secret:zippw}}` | Collected at seal time, never exposed in shell history. |
 | **Runtime argument** | `{{arg:1}}` `{{arg:2}}` | Supplied by the caller at runtime. |
 
@@ -127,7 +127,7 @@ open dist/cmdseal.app
 
 ```bash
 # Example 1: Literal password (simple case)
-zip -j -P mypassword {{arg:1}} {{arg:2}}
+7zz a -tzip -mem=AES256 -pmypassword {{arg:1}} {{arg:2}}
 
 # Example 2: Secret placeholder (recommended)
 zhmm-cli --pwd {{secret:master}} -s {{arg:1}}
@@ -373,7 +373,7 @@ python3 cmdseal.py seal \
 ```bash
 # Example 1: Basic seal
 python3 cmdseal.py seal \
-    --command 'zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}' \
+    --command 'sh -c "7zz a -tzip -mem=AES256 -p\"$1\" \"$2\" \"$3\"" _ {{secret:zippw}} {{arg:1}} {{arg:2}}' \
     --output ./seal_zip
 
 # Example 2: With label and explicit user
@@ -444,7 +444,7 @@ python3 cmdseal.py list --json
 Label              Service                          Template
 ────────────────── ──────────────────────────────── ─────────────────────────
 Prod encryption    cmdseal.a1b2c3.K                 openssl enc -aes-256-cbc -k *** -in {{arg:1}}
-ZIP encryption     cmdseal.d4e5f6.K                 zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}
+ZIP encryption     cmdseal.d4e5f6.K                 sh -c "7zz a -tzip -mem=AES256 ..." {{secret:zippw}} {{arg:1}} {{arg:2}}
 ```
 
 **Column meanings**:
@@ -504,7 +504,7 @@ orphaned keychain items (on-disk binary missing):
   • service     : cmdseal.abc123def456.K
     label       : cmdseal sealed: old_zip
     output_path : /Users/you/bin/old_zip
-    template    : zip -P *** *** {{arg:1}}
+    template    : sh -c "7zz a -tzip -mem=AES256 ..." *** *** {{arg:1}}
     created     : 2026-03-01T10:00:00+00:00
 
 --dry-run: would delete 1 keychain item(s). Re-run without --dry-run to proceed.
@@ -600,7 +600,7 @@ At runtime:
 
 ```bash
 # Simple case: password is not sensitive
-zip -j -P mypassword {{arg:1}} {{arg:2}}
+7zz a -tzip -mem=AES256 -pmypassword {{arg:1}} {{arg:2}}
 ```
 
 At runtime:

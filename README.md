@@ -58,7 +58,7 @@ open dist/cmdseal.app
 ```
 
 This launches the seal wizard — a four-step GUI:
-1. **Command** — type your command (e.g. `zip -j -P mypassword {{arg:1}}`)
+1. **Command** — type your command (e.g. `7zz a -tzip -mem=AES256 -pmypassword {{arg:1}}`)
 2. **Secrets** — if you used `{{secret:NAME}}`, fill them in here (skipped otherwise)
 3. **Options** — output path, label, signing identity
 4. **Execute** — preview and run `cmdseal.py` in the background
@@ -92,10 +92,12 @@ For CI pipelines, AI-agent build scripts, or when you prefer the
 terminal, `cmdseal.py` provides full CLI access:
 
 ```bash
-# Seal a zip-with-password command. `zippw` is collected interactively
-# and baked into the AEAD ciphertext; it is never stored in plaintext.
+# Seal an encrypted-zip command using WinZip AES-256 (not legacy ZipCrypto).
+# 7-Zip ships with macOS via Homebrew: `brew install sevenzip`
+# The password placeholder must occupy its own argv position, so we wrap
+# the call in `sh -c` to concatenate `-p<pwd>` at runtime.
 python3 cmdseal.py seal \
-    --command 'zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}' \
+    --command 'sh -c "7zz a -tzip -mem=AES256 -p\"$1\" \"$2\" \"$3\"" _ {{secret:zippw}} {{arg:1}} {{arg:2}}' \
     --output  ./seal_zip
 # → two password prompts (value + confirm), then ./seal_zip is built
 
@@ -129,10 +131,10 @@ as sample input; the flow below is copy-paste runnable on your
 machine:
 
 ```bash
-# 1) Seal an encrypted-zip command as demo/seal_zip. You will be
-#    prompted twice for the value of `zippw` (say 'hunter2'):
+# 1) Seal an encrypted-zip command (WinZip AES-256) as demo/seal_zip.
+#    You will be prompted twice for the value of `zippw` (say 'hunter2'):
 python3 cmdseal.py seal \
-    --command 'zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}' \
+    --command 'sh -c "7zz a -tzip -mem=AES256 -p\"$1\" \"$2\" \"$3\"" _ {{secret:zippw}} {{arg:1}} {{arg:2}}' \
     --output  ./demo/seal_zip
 
 # 2) Use it to compress demo/demo_zip_input.txt into a
@@ -229,6 +231,22 @@ window size is also persisted across restarts.
 
 Be honest with yourself about the threat model before relying on
 `cmdseal`. It is a **capability gateway**, not a vault.
+
+### A note on the zip example
+
+Earlier versions of this README used `zip -P` (legacy ZipCrypto) in the
+seal\_zip demo. ZipCrypto is broken: a known-plaintext attack
+([bkcrack](https://github.com/kimci86/bkcrack)) recovers the internal
+keys in seconds-to-minutes on a laptop once the attacker has any ~12
+bytes of plaintext from the archive — and most attachments (PNG, PDF,
+JSON, Markdown) have predictable headers, so the attacker often does
+not even need to ask for plaintext.
+
+cmdseal protects the *password* from the agent, but cannot protect the
+*archive* if the archive itself uses a broken cipher. The demo now uses
+**WinZip AES-256** (`7zz -tzip -mem=AES256`), which is the cipher
+recommended whenever the resulting archive may be transported, shared,
+or stored outside the original machine.
 
 See [DESIGN.md](./DESIGN.md) for the full threat model, the
 partition-list empirical findings, and the rationale behind Plan D

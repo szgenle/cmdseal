@@ -138,7 +138,7 @@ code requirement**，而不仅仅是它的路径。ad-hoc 签名把身份钉死�
 
 ### 4.5 输出通道（推荐用法）
 
-推荐 sealed 命令把**加密后的产物**（例如 `zip -P`、`gpg`、`age`）写到
+推荐 sealed 命令把**加密后的产物**（例如 `7zz -tzip -mem=AES256`、`gpg`、`age`）写到
 一个文件路径，stdout 只打印一行简短的成功信息。AI 智能体把这个产物
 原样转发；明文永远不会出现在 stdout、日志或网络数据包里。
 
@@ -329,3 +329,15 @@ ad-hoc 已经够用；Developer ID 只建议在需要分发 / 共享构建时启
 - **AI 能力**：`exec` ✔  `read secret` ✘
 - **网络传输**：只走密文。
 - **解密方**：只有你的手机 + 只在你脑子里的密码。
+
+### 安全说明：ZipCrypto 与 WinZip AES-256
+
+README 中的 `seal_zip` 演示此前使用了 `zip -P`（传统 ZipCrypto）。
+ZipCrypto 已被密码学上攻破——已知明文攻击
+（[bkcrack](https://github.com/kimci86/bkcrack)）只需约 12 字节的
+已知明文即可在数秒至数分钟内恢复内部密钥，而大多数常见文件格式
+（PNG、PDF、JSON、Markdown）通过其固定文件头即可提供这些明文。
+
+cmdseal 的职责是保护*密码*不被 AI 智能体读取；它无法修复下游工具
+使用的弱加密算法。所有演示现已改用 **WinZip AES-256**
+（`7zz a -tzip -mem=AES256 -p<pwd>`）。
