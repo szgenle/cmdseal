@@ -53,7 +53,7 @@ open dist/cmdseal.app
 ```
 
 这将启动封存向导 —— 一个四步图形界面：
-1. **命令** — 输入你的命令（例如：`zip -j -P mypassword {{arg:1}}`）
+1. **命令** — 输入你的命令（例如：`7zz a -tzip -mem=AES256 -pmypassword {{arg:1}}`）
 2. **Secret** — 如果使用了 `{{secret:NAME}}`，在这里填写（否则跳过）
 3. **选项** — 输出路径、标签、签名身份
 4. **执行** — 预览并在后台运行 `cmdseal.py`
@@ -80,10 +80,11 @@ cdhash 的 partition-list 握手过程。每个封存的二进制在每个用户
 提供完整的 CLI 访问：
 
 ```bash
-# 封存一个带密码的 zip 命令。`zippw` 通过交互方式收集
-# 并嵌入 AEAD 密文中；它永远不会以明文形式存储。
+# 封存一个加密压缩命令，使用 WinZip AES-256（而非过时的 ZipCrypto）。
+# macOS 上通过 Homebrew 安装 7-Zip：`brew install sevenzip`
+# 密码占位符必须独占 argv 位置，因此用 sh -c 在运行时拼接 -p<pwd>。
 python3 cmdseal.py seal \
-    --command 'zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}' \
+    --command 'sh -c "7zz a -tzip -mem=AES256 -p\"$1\" \"$2\" \"$3\"" _ {{secret:zippw}} {{arg:1}} {{arg:2}}' \
     --output  ./seal_zip
 # → 两次密码提示（输入 + 确认），然后生成 ./seal_zip
 
@@ -115,11 +116,12 @@ python3 cmdseal.py seal \
 作为输入素材，以下流程可直接复制粘贴到你本机跑：
 
 ```bash
-# 1）封存一个加密压缩命令为 demo/seal_zip。交互式输入自定义密码：
+# 1）封存一个加密压缩命令（WinZip AES-256）为 demo/seal_zip。
+#    交互式输入自定义密码（比如 'hunter2'）：
 python3 cmdseal.py seal \
-    --command 'zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}' \
+    --command 'sh -c "7zz a -tzip -mem=AES256 -p\"$1\" \"$2\" \"$3\"" _ {{secret:zippw}} {{arg:1}} {{arg:2}}' \
     --output  ./demo/seal_zip
-# → 两次提示输入 zippw 的值，比如 'hunter2'
+# → 两次提示输入 zippw 的值
 
 # 2）用它把 demo/demo_zip_input.txt 压成有密码保护的 out.zip：
 ./demo/seal_zip /tmp/out.zip ./demo/demo_zip_input.txt
@@ -211,6 +213,20 @@ GUI 是 `cmdseal.py` 的一层薄封装；没有重复的加密代码。
 
 在依赖 `cmdseal` 之前，请诚实地评估你的威胁模型。它是一个
 **能力网关**，而不是保险库。
+
+### 关于 zip 示例的说明
+
+本 README 的早期版本在 seal\_zip 演示中使用了 `zip -P`（传统
+ZipCrypto）。ZipCrypto 已被破解：已知明文攻击
+（[bkcrack](https://github.com/kimci86/bkcrack)）只要获得压缩包中
+约 12 字节的明文，就能在笔记本上数秒至数分钟内恢复内部密钥——而
+大多数附件（PNG、PDF、JSON、Markdown）都有可预测的文件头，所以
+攻击者往往不需要额外获取明文。
+
+cmdseal 保护的是*密码*不被智能体看到，但如果压缩包本身使用了被破解
+的加密算法，cmdseal 无法保护*压缩包内容*。演示现已改用 **WinZip
+AES-256**（`7zz -tzip -mem=AES256`），这是压缩包需要传输、共享或
+存储在原始机器之外时推荐使用的加密方式。
 
 完整威胁模型、partition-list 实证发现和 Plan D（当前方案）
 的基本原理，参见 [DESIGN.md](./DESIGN.md)。

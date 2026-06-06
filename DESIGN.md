@@ -143,7 +143,7 @@ env vars in passthrough values.
 ### 4.5 Output channel (recommended usage)
 
 The sealed command is expected to write an **encrypted artifact** (e.g.
-`zip -P`, `gpg`, `age`) to a file path, and print only a short success
+`7zz -tzip -mem=AES256`, `gpg`, `age`) to a file path, and print only a short success
 line to stdout. The AI agent forwards the artifact as-is; the plaintext
 never appears in stdout, logs, or network frames.
 
@@ -350,3 +350,16 @@ Developer ID is recommended only for distributed / shared builds.
 - **AI 能力**：`exec` ✔  `read secret` ✘
 - **网络传输**：只有密文。
 - **解密方**：只有你的手机 + 只在你脑子里的密码。
+
+### Security Note: ZipCrypto vs WinZip AES-256
+
+The README's `seal_zip` demo previously used `zip -P` (legacy ZipCrypto).
+ZipCrypto is cryptographically broken — a known-plaintext attack
+([bkcrack](https://github.com/kimci86/bkcrack)) recovers the internal
+keys in seconds-to-minutes given ~12 bytes of known plaintext, which
+most common file formats (PNG, PDF, JSON, Markdown) supply via their
+fixed headers.
+
+cmdseal's job is to protect the *password* from the AI agent; it cannot
+fix a weak cipher used by the downstream tool. All demos now use
+**WinZip AES-256** (`7zz a -tzip -mem=AES256 -p<pwd>`) instead.

@@ -86,7 +86,7 @@ cd cmdseal
 
 # 2. 封存一个命令（交互式输入密码）
 python3 cmdseal.py seal \
-    --command 'zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}' \
+    --command 'sh -c "7zz a -tzip -mem=AES256 -p\"$1\" \"$2\" \"$3\"" _ {{secret:zippw}} {{arg:1}} {{arg:2}}' \
     --output ./my_sealed_zip
 
 # 3. 使用封存的二进制
@@ -119,7 +119,7 @@ open dist/cmdseal.app
 
 | 类型 | 示例 | 说明 |
 |------|------|------|
-| **字面量密码** | `zip -j -P mypassword` | 直接写入命令（简单但不推荐用于高安全场景） |
+| **字面量密码** | `7zz a -tzip -mem=AES256 -pmypassword` | 直接写入命令（简单但不推荐用于高安全场景） |
 | **Secret 占位符** | `{{secret:zippw}}` | 封存时采集，不暴露给 shell history |
 | **运行时参数** | `{{arg:1}}` `{{arg:2}}` | 运行时由用户传入 |
 
@@ -127,7 +127,7 @@ open dist/cmdseal.app
 
 ```bash
 # 示例 1：字面量密码（简单场景）
-zip -j -P mypassword {{arg:1}} {{arg:2}}
+7zz a -tzip -mem=AES256 -pmypassword {{arg:1}} {{arg:2}}
 
 # 示例 2：Secret 占位符（推荐）
 zhmm-cli --pwd {{secret:master}} -s {{arg:1}}
@@ -368,7 +368,7 @@ python3 cmdseal.py seal \
 ```bash
 # 示例 1：基本封存
 python3 cmdseal.py seal \
-    --command 'zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}' \
+    --command 'sh -c "7zz a -tzip -mem=AES256 -p\"$1\" \"$2\" \"$3\"" _ {{secret:zippw}} {{arg:1}} {{arg:2}}' \
     --output ./seal_zip
 
 # 示例 2：带标签和用户
@@ -438,7 +438,7 @@ python3 cmdseal.py list --json
 Label              Service                          Template
 ────────────────── ──────────────────────────────── ─────────────────────────
 生产加密工具       cmdseal.a1b2c3.K                 openssl enc -aes-256-cbc -k *** -in {{arg:1}}
-ZIP 加密           cmdseal.d4e5f6.K                 zip -j -P {{secret:zippw}} {{arg:1}} {{arg:2}}
+ZIP 加密           cmdseal.d4e5f6.K                 sh -c "7zz a -tzip -mem=AES256 ..." {{secret:zippw}} {{arg:1}} {{arg:2}}
 ```
 
 **字段说明**：
@@ -496,7 +496,7 @@ orphaned keychain items (on-disk binary missing):
   • service     : cmdseal.abc123def456.K
     label       : cmdseal sealed: old_zip
     output_path : /Users/you/bin/old_zip
-    template    : zip -P *** *** {{arg:1}}
+    template    : sh -c "7zz a -tzip -mem=AES256 ..." *** *** {{arg:1}}
     created     : 2026-03-01T10:00:00+00:00
 
 --dry-run: would delete 1 keychain item(s). Re-run without --dry-run to proceed.
@@ -588,7 +588,7 @@ openssl enc -aes-256-cbc -k {{secret:enc_key}} -in {{arg:1}} -out {{arg:2}}
 
 ```bash
 # 简单场景：密码不敏感
-zip -j -P mypassword {{arg:1}} {{arg:2}}
+7zz a -tzip -mem=AES256 -pmypassword {{arg:1}} {{arg:2}}
 ```
 
 运行时：
